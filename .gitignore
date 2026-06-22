@@ -24,3 +24,11 @@ Thumbs.db
 .vscode/
 .idea/
 .agents/
+
+# Reports
+*.pdf
+*.docx
+
+# Local DB Store
+gateway/data/
+

@@ -1,0 +1,191 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+import { C, S, Icon } from "./Theme";
+
+interface AnalyticsProps {
+  token: string;
+  docs: any[];
+}
+
+export default function AnalyticsPage({ token, docs }: AnalyticsProps) {
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:3001";
+
+  useEffect(() => {
+    async function fetchQueryHistory() {
+      try {
+        const res = await fetch(`${GATEWAY}/api/query-history`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setHistory(data.queries || []);
+        }
+      } catch (err) {
+        console.error("Failed to load query logs", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (token) {
+      fetchQueryHistory();
+    }
+  }, [token, GATEWAY]);
+
+  // Aggregate entity metrics
+  let totalEquipment = 0;
+  let totalParameters = 0;
+  let totalStandards = 0;
+
+  docs.forEach(d => {
+    totalEquipment += (d.entities?.equipment_tags || []).length;
+    totalParameters += (d.entities?.process_parameters || []).length;
+    totalStandards += (d.entities?.safety_standards || []).length;
+  });
+
+  const grandTotal = totalEquipment + totalParameters + totalStandards;
+  const eqPct = grandTotal > 0 ? Math.round((totalEquipment / grandTotal) * 100) : 0;
+  const paramPct = grandTotal > 0 ? Math.round((totalParameters / grandTotal) * 100) : 0;
+  const stdPct = grandTotal > 0 ? Math.round((totalStandards / grandTotal) * 100) : 0;
+
+  return (
+    <div style={{ padding: 28, overflowY: "auto", minHeight: "100%" }}>
+      {/* Title */}
+      <div style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 800, color: C.text }}>System Analytics & Metrics</h2>
+        <p style={{ color: C.muted, fontSize: 14, marginTop: 4 }}>
+          Monitor entity density distributions and recent operator search patterns.
+        </p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.9fr", gap: 24 }}>
+        
+        {/* Left Side: Entity Distributions */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <div style={{ ...S.card, padding: 24 }}>
+            <h3 style={{ fontSize: 17, fontWeight: 800, marginBottom: 20 }}>Entity Density Distribution</h3>
+            
+            {grandTotal === 0 ? (
+              <div style={{ textAlign: "center", padding: "30px 0", color: C.muted, fontSize: 13 }}>
+                No entities mapped yet. Ingest documents to populate stats.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                {/* Equipment Tags */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.primary }} />
+                      Equipment Tags
+                    </div>
+                    <span>{totalEquipment} ({eqPct}%)</span>
+                  </div>
+                  <div style={{ height: 10, background: C.surf3, borderRadius: 10, overflow: "hidden" }}>
+                    <div style={{ width: `${eqPct}%`, height: "100%", background: C.primary, borderRadius: 10 }} />
+                  </div>
+                </div>
+
+                {/* Parameters */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.second }} />
+                      Process Parameters
+                    </div>
+                    <span>{totalParameters} ({paramPct}%)</span>
+                  </div>
+                  <div style={{ height: 10, background: C.surf3, borderRadius: 10, overflow: "hidden" }}>
+                    <div style={{ width: `${paramPct}%`, height: "100%", background: C.second, borderRadius: 10 }} />
+                  </div>
+                </div>
+
+                {/* Standards */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.error }} />
+                      Safety Standards
+                    </div>
+                    <span>{totalStandards} ({stdPct}%)</span>
+                  </div>
+                  <div style={{ height: 10, background: C.surf3, borderRadius: 10, overflow: "hidden" }}>
+                    <div style={{ width: `${stdPct}%`, height: "100%", background: C.error, borderRadius: 10 }} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Metrics Card */}
+          <div style={{ ...S.card, padding: 24, background: `linear-gradient(135deg, ${C.surf} 0%, rgba(87,27,193,0.06) 100%)` }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Graph Summary</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ background: C.surf2, padding: 14, borderRadius: 10, border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: C.primary }}>{docs.length}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Documents</div>
+              </div>
+              <div style={{ background: C.surf2, padding: 14, borderRadius: 10, border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: C.accent }}>{grandTotal}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Linked Entities</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Query History Log */}
+        <div style={{ ...S.card, padding: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <h3 style={{ fontSize: 17, fontWeight: 800 }}>Audit Query logs</h3>
+            <span style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", gap: 4 }}>
+              <Icon name="history" size={14} /> Last 50 queries
+            </span>
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "40px 0", color: C.muted, fontSize: 13 }}>
+              Loading logs...
+            </div>
+          ) : history.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 0", color: C.muted, fontSize: 13 }}>
+              No search queries logged yet.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 460, overflowY: "auto", paddingRight: 4 }}>
+              {history.map((q, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: C.surf2,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 10,
+                    padding: "12px 16px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center"
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.text, wordBreak: "break-all" }}>
+                      {q.query}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 6, display: "flex", gap: 8 }}>
+                      <span>Session ID: {q.sid || "Anonymous"}</span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, whiteSpace: "nowrap" }}>
+                    {q.ts ? new Date(q.ts).toLocaleTimeString() : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}

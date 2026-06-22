@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:v1.10.0
+    container_name: docops-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  # MongoDB Document Store
+  mongodb:
+    image: mongo:6.0
+    container_name: docops-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+
+  # Python AI Backend Core
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: docops-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - QDRANT_URL=http://qdrant:6333
+      - COLLECTION=docops_manuals
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+  # Node Express Security Gateway
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: docops-gateway
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - MONGODB_URI=mongodb://mongodb:27017/docops
+      - PYTHON_API_URL=http://backend:8000
+      - JWT_SECRET=docops_super_secret_jwt_2024
+    depends_on:
+      - mongodb
+      - backend
+    restart: unless-stopped
+
+  # Next.js Frontend Client UI
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: docops-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_GATEWAY_URL=http://localhost:3001
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:
+  mongodb_data:
