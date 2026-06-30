@@ -297,7 +297,7 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
       </aside>
 
       {/* Right: Main Workspace (Chat / Graph) */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#f8fafc", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "rgba(10,15,28,0.3)", overflow: "hidden" }}>
         
         {/* Tab Header */}
         <div style={{
@@ -359,11 +359,11 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
         {tab === "chat" ? (
           <>
             {/* Quick Suggestions */}
-            <div style={{ padding: "16px 20px 0", display: "flex", gap: 12, background: "#fff" }}>
+            <div style={{ padding: "16px 20px 0", display: "flex", gap: 12, background: "transparent" }}>
               {[
-                { icon: "search", label: "Semantic Search", ex: 'Find shutdown sequence for P-101', query: "Find shutdown sequence for P-101", bg: "#eff6ff", c: "#3b82f6" },
-                { icon: "rule", label: "Compliance Analysis", ex: 'Verify procedures against OISD-137', query: "Verify procedures against OISD-137", bg: "#f0fdf4", c: "#22c55e" },
-                { icon: "build", label: "RCA 5-Why Analysis", ex: 'Run RCA on Pump P-101 failures', query: "Perform RCA on Pump P-101", bg: "#fffbeb", c: "#f59e0b" },
+                { icon: "search", label: "Semantic Search", ex: 'Find shutdown sequence for P-101', query: "Find shutdown sequence for P-101", bg: "rgba(59,130,246,0.1)", c: "#60a5fa" },
+                { icon: "rule", label: "Compliance Analysis", ex: 'Verify procedures against OISD-137', query: "Verify procedures against OISD-137", bg: "rgba(34,197,94,0.1)", c: "#4ade80" },
+                { icon: "build", label: "RCA 5-Why Analysis", ex: 'Run RCA on Pump P-101 failures', query: "Perform RCA on Pump P-101", bg: "rgba(245,158,11,0.1)", c: "#fbbf24" },
               ].map(h => (
                 <div
                   key={h.label}
@@ -374,8 +374,8 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
                   }}
                 >
                   <Icon name={h.icon} size={20} color={h.c} />
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#1e293b", margin: "6px 0 3px" }}>{h.label}</div>
-                  <div style={{ fontSize: 10, color: "#64748b", fontStyle: "italic" }}>{h.ex}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, margin: "6px 0 3px" }}>{h.label}</div>
+                  <div style={{ fontSize: 10, color: C.muted, fontStyle: "italic" }}>{h.ex}</div>
                 </div>
               ))}
             </div>
@@ -435,8 +435,8 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
                 
                 {isTyping && (
                   <div style={{ display: "flex" }}>
-                    <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, borderBottomLeftRadius: 4, padding: "12px 16px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#64748b" }}>
-                      <Icon name="hourglass_empty" size={16} color="#3b82f6" />
+                    <div style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 16, borderBottomLeftRadius: 4, padding: "12px 16px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.muted }}>
+                      <Icon name="hourglass_empty" size={16} color={C.primary} />
                       Agent is executing pipeline...
                     </div>
                   </div>
