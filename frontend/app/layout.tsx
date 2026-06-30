@@ -4,6 +4,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "DocOps | Enterprise v2.4 Dashboard",
   description: "DocOps: AI-powered knowledge platform for asset-intensive industries.",
+  manifest: "/manifest.json",
+  themeColor: "#020817",
 };
 
 export default function RootLayout({
@@ -19,6 +21,21 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                    console.log('ServiceWorker registration successful');
+                  }, function(err) {
+                    console.log('ServiceWorker registration failed: ', err);
+                  });
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

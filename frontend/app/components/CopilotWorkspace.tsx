@@ -4,6 +4,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { C, S, Icon } from "./Theme";
 import KnowledgeGraph from "./KnowledgeGraph";
 import VoiceModal from "./VoiceModal";
+import { CreateMLCEngine, MLCEngineInterface } from "@mlc-ai/web-llm";
 
 interface CopilotProps {
   token: string;
@@ -12,6 +13,7 @@ interface CopilotProps {
   allTags: string[];
   indexedCount: number;
   fetchDocs: () => Promise<void>;
+  initialQuery?: string;
 }
 
 type ChatMsg = {
@@ -21,7 +23,7 @@ type ChatMsg = {
   tools?: { name: string; status: "running" | "done"; input?: string }[];
 };
 
-export default function CopilotWorkspace({ token, user, docs, allTags, indexedCount, fetchDocs }: CopilotProps) {
+export default function CopilotWorkspace({ token, user, docs, allTags, indexedCount, fetchDocs, initialQuery }: CopilotProps) {
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
       id: "welcome",
@@ -37,6 +39,11 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
   const [showVoice, setShowVoice] = useState(false);
   const [voiceLang, setVoiceLang] = useState<"en-IN" | "hi-IN">("en-IN");
   const [readAloud, setReadAloud] = useState(false);
+  
+  const [webLlmEngine, setWebLlmEngine] = useState<MLCEngineInterface | null>(null);
+  const [webLlmLoading, setWebLlmLoading] = useState(false);
+  const [webLlmProgress, setWebLlmProgress] = useState("");
+
   const readAloudRef = useRef(false);
   useEffect(() => { readAloudRef.current = readAloud; }, [readAloud]);
 
@@ -48,16 +55,44 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
   }, [messages, isTyping]);
 
   useEffect(() => {
-    const pendingQuery = sessionStorage.getItem("pending_copilot_query");
-    if (pendingQuery && token) {
+    let pending = sessionStorage.getItem("pending_copilot_query");
+    if (initialQuery) pending = initialQuery;
+
+    if (pending && token) {
       sessionStorage.removeItem("pending_copilot_query");
-      setInput(pendingQuery);
+      (window as any).__prefillQuery = undefined;
+      setInput(pending);
       setTimeout(() => {
         const form = document.getElementById("copilot-form") as HTMLFormElement;
         if (form) form.requestSubmit();
       }, 500);
     }
-  }, [token]);
+  }, [token, initialQuery]);
+
+  useEffect(() => {
+    // Check if user has toggled on WebLLM in settings
+    const loadEngine = async () => {
+      try {
+        const prefs = localStorage.getItem("docops_display_prefs");
+        if (prefs) {
+          const parsed = JSON.parse(prefs);
+          if (parsed.useWebLLM && !webLlmEngine) {
+            setWebLlmLoading(true);
+            const engine = await CreateMLCEngine(
+              "Llama-3-8B-Instruct-q4f32_1-MLC", 
+              { initProgressCallback: (progress) => { setWebLlmProgress(progress.text); } }
+            );
+            setWebLlmEngine(engine);
+            setWebLlmLoading(false);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load WebLLM", err);
+        setWebLlmLoading(false);
+      }
+    };
+    loadEngine();
+  }, []);
 
   const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:3001";
 
@@ -100,6 +135,30 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
     const assistantMsgId = `a${Date.now()}`;
     // Insert empty assistant message that will receive chunks
     setMessages(p => [...p, { id: assistantMsgId, role: "assistant", content: "", tools: [] }]);
+
+    // Intercept with WebLLM if available
+    if (webLlmEngine) {
+      try {
+        const stream = await webLlmEngine.chat.completions.create({
+          messages: [{ role: "system", content: "You are DocOps offline AI. Keep responses concise." }, { role: "user", content: q }],
+          stream: true,
+        });
+        
+        let finalAssistantText = "";
+        for await (const chunk of stream) {
+          const content = chunk.choices[0]?.delta?.content || "";
+          finalAssistantText += content;
+          setMessages(p => p.map(m => m.id === assistantMsgId ? { ...m, content: finalAssistantText } : m));
+        }
+        
+        if (readAloudRef.current) speakText(finalAssistantText, voiceLang);
+      } catch (err: any) {
+        setMessages(p => [...p, { id: `e${Date.now()}`, role: "error", content: `Offline AI Error: ${err.message}` }]);
+      } finally {
+        setIsTyping(false);
+      }
+      return;
+    }
 
     try {
       const res = await fetch(`${GATEWAY}/api/query`, {
@@ -336,6 +395,22 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
                   <option value="en-IN">🎙 English</option>
                   <option value="hi-IN">🎙 Hindi</option>
                 </select>
+
+                <div style={{ padding: "4px 10px", background: "rgba(255,255,255,0.1)", borderRadius: 100, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 6, border: `1px solid rgba(255,255,255,0.15)` }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.accent, animation: "pulse 2s infinite" }} />
+                  Copilot API
+                </div>
+                
+                {webLlmLoading && (
+                  <div style={{ fontSize: 11, color: "#fbbf24", display: "flex", alignItems: "center", gap: 6, animation: "pulse 2s infinite" }}>
+                    <Icon name="sync" size={14} /> Loading Offline AI ({webLlmProgress.split("]")[0] + "]"})
+                  </div>
+                )}
+                {webLlmEngine && (
+                  <div style={{ fontSize: 11, color: "#34d399", display: "flex", alignItems: "center", gap: 6, background: "rgba(52,211,153,0.1)", padding: "4px 10px", borderRadius: 100, border: "1px solid rgba(52,211,153,0.3)" }}>
+                    <Icon name="bolt" size={14} /> Offline AI Active
+                  </div>
+                )}
               </>
             )}
           </div>

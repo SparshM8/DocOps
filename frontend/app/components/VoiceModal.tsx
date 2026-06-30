@@ -21,6 +21,26 @@ export default function VoiceModal({ onTranscript, onClose, language = "en-IN" }
   const animFrameRef                = useRef<number>(0);
   const streamRef                   = useRef<MediaStream | null>(null);
 
+  // ── Chime Sound ────────────────────────────────────────────────────────────
+  const playChime = (freq1: number, freq2: number, type: OscillatorType = "sine") => {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq1, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(freq2, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {
+      // Ignore audio context errors
+    }
+  };
+
   // ── Waveform Analyser ──────────────────────────────────────────────────────
   const startWaveform = (stream: MediaStream) => {
     const ctx      = new AudioContext();
@@ -64,6 +84,7 @@ export default function VoiceModal({ onTranscript, onClose, language = "en-IN" }
       silenceTimerRef.current = setTimeout(() => {
         if (transcript.trim()) {
           recognition.stop();
+          playChime(600, 800, "sine");
           setPhase("processing");
         }
       }, 1800);
@@ -105,9 +126,11 @@ export default function VoiceModal({ onTranscript, onClose, language = "en-IN" }
       streamRef.current = stream;
       startWaveform(stream);
       recognition.start();
+      playChime(400, 600, "sine");
     }).catch(() => {
       // Start recognition anyway even without waveform
       recognition.start();
+      playChime(400, 600, "sine");
     });
 
     return () => {

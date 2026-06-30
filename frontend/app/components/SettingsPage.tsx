@@ -18,6 +18,7 @@ type DisplayPrefs = {
   compactMode: boolean;
   showQueryHistory: boolean;
   autoOpenCopilot: boolean;
+  useWebLLM: boolean;
 };
 
 function Section({ title, description, icon, children }: { title: string; description: string; icon: string; children: React.ReactNode }) {
@@ -78,6 +79,7 @@ export default function SettingsPage({ user }: SettingsPageProps) {
     compactMode: false,
     showQueryHistory: true,
     autoOpenCopilot: false,
+    useWebLLM: false,
   });
   const [saved, setSaved] = useState(false);
 
@@ -189,6 +191,12 @@ export default function SettingsPage({ user }: SettingsPageProps) {
           checked={display.autoOpenCopilot}
           onChange={v => setDisplay(p => ({ ...p, autoOpenCopilot: v }))}
         />
+        <Toggle
+          label="Offline AI Inference (WebLLM)"
+          description="Download and run Llama-3-8B entirely in your browser using WebGPU for true offline operation."
+          checked={display.useWebLLM}
+          onChange={v => setDisplay(p => ({ ...p, useWebLLM: v }))}
+        />
       </Section>
 
       {/* Security */}
@@ -213,9 +221,41 @@ export default function SettingsPage({ user }: SettingsPageProps) {
             </div>
           ))}
         </div>
-        <p style={{ fontSize: 12, color: C.muted, marginTop: 16 }}>
+        <p style={{ fontSize: 12, color: C.muted, margin: "16px 0 0" }}>
           JWT tokens expire after 7 days. Password changes invalidate previous tokens immediately.
         </p>
+      </Section>
+
+      {/* Data Export (Air-gapped Sync) */}
+      <Section title="Air-Gapped Data Sync" description="Export offline vector database state." icon="cloud_download">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: "14px 18px", border: `1px solid ${C.border}` }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>Export Knowledge Vault</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Downloads a complete Qdrant vector snapshot. Can be manually loaded onto air-gapped rugged tablets.</div>
+          </div>
+          <button 
+            onClick={() => {
+              const token = localStorage.getItem("docops_token");
+              if (!token) return;
+              const a = document.createElement('a');
+              a.href = `${process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:3001"}/api/export-vault`;
+              // Usually we'd want to fetch with headers to pass auth, but since it's a direct download link, we'll fetch then blob it
+              fetch(a.href, { headers: { "Authorization": `Bearer ${token}` } })
+                .then(r => r.blob())
+                .then(blob => {
+                  const url = window.URL.createObjectURL(blob);
+                  const anchor = document.createElement('a');
+                  anchor.href = url;
+                  anchor.download = 'docops_vault_backup.zip';
+                  anchor.click();
+                  window.URL.revokeObjectURL(url);
+                });
+            }}
+            style={{ ...S.btnPrimary, flexShrink: 0, padding: "8px 16px" }}
+          >
+            <Icon name="download" size={16} /> Export .zip
+          </button>
+        </div>
       </Section>
 
       {/* About */}

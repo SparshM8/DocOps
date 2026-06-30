@@ -377,6 +377,7 @@ app.post("/api/upload", requireAuth, requireRole(["plant_manager"]), upload.sing
     });
 
     db.createAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: "upload_doc", details: { name: req.file.originalname }, status: "success" }).catch(()=>{});
+    if (typeof broadcastAnalyticsUpdate !== 'undefined') broadcastAnalyticsUpdate("new_document", { name: req.file.originalname });
 
     // Forward to Python AI engine
     const form = new FormData();
@@ -411,6 +412,7 @@ app.post("/api/query", requireAuth, async (req, res, next) => {
     if (!query) return res.status(400).json({ detail: "query is required" });
 
     db.createAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: "query", details: { query }, status: "success" }).catch(()=>{});
+    if (typeof broadcastAnalyticsUpdate !== 'undefined') broadcastAnalyticsUpdate("new_query", { query });
 
     const pythonRes = await fetch(`${PYTHON_API_URL}/query`, {
       method:  "POST",
@@ -476,42 +478,28 @@ app.post("/api/documents/:id/delete-vectors", requireAuth, requireRole(["plant_m
 // ── Reporting ─────────────────────────────────────────────────────────────────
 app.get("/api/generate-report", requireAuth, requireRole(["plant_manager"]), async (req, res, next) => {
   try {
-    const docs = await db.listDocs();
-    let logs = [];
-    if (useMongoose) {
-      logs = await mongoose.model("AuditLog").find({ action: "query" }).sort({ createdAt: -1 }).limit(100);
-    } else {
-      logs = readStore("audit.json").filter(l => l.action === "query").slice(-100);
+    const pythonRes = await fetch(`${PYTHON_API_URL}/generate-report`, { signal: AbortSignal.timeout(60000) });
+    const data = await pythonRes.json();
+    db.createAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: "generate_report", status: "success" }).catch(()=>{});
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+app.get("/api/export-vault", requireAuth, requireRole(["plant_manager"]), async (req, res, next) => {
+  try {
+    const pythonRes = await fetch(`${PYTHON_API_URL}/export-vault`, { 
+      signal: AbortSignal.timeout(60000),
+      headers: { Authorization: req.headers.authorization } // pass auth to python
+    });
+    
+    if (!pythonRes.ok) {
+      return res.status(pythonRes.status).json({ detail: "Export failed" });
     }
     
-    let totalTags = 0;
-    docs.forEach(d => totalTags += (d.entities?.equipment_tags || []).length);
-    
-    const queries = logs.map(l => l.details?.query || "").filter(Boolean);
-    const hasPumpFailures = queries.some(q => q.toLowerCase().includes("pump") || q.toLowerCase().includes("p-101"));
-
-    const reportMarkdown = `
-# Executive "Lessons Learned" Report
-**Date Generated:** ${new Date().toLocaleDateString()}
-**Prepared By:** DocOps AI Engine
-
-## 1. System Overview
-- **Total Documents Indexed:** ${docs.length}
-- **Equipment Tags Tracked:** ${totalTags}
-- **Recent AI Inquiries Analyzed:** ${queries.length}
-
-## 2. Key Failure Trends
-${hasPumpFailures ? "- **High Frequency:** Multiple RCA inquiries detected regarding **Pump P-101** mechanical seal failures. This indicates a potential recurring systemic issue." : "- **Stable Operations:** No significant clusters of equipment failure inquiries detected this week."}
-- **Compliance Checks:** 40% of queries were related to verifying Standard Operating Procedures against OISD-137.
-
-## 3. Recommended Actions (AI Generated)
-- **Preventative Maintenance:** Schedule an immediate vibration analysis on Pump P-101.
-- **Documentation Update:** Update the primary "Startup Procedure" document, as it was repeatedly queried for clarification on step 4.
-    `;
-
-    db.createAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: "generate_report", status: "success" }).catch(()=>{});
-    
-    res.json({ report: reportMarkdown.trim() });
+    const buffer = Buffer.from(await pythonRes.arrayBuffer());
+    res.setHeader("Content-Disposition", 'attachment; filename="docops_vault_backup.zip"');
+    res.setHeader("Content-Type", "application/zip");
+    res.send(buffer);
   } catch (err) { next(err); }
 });
 
@@ -527,11 +515,58 @@ app.use((err, _req, res, _next) => {
 // ── WebRTC Signaling Server ───────────────────────────────────────────────────
 // Rooms: Map<roomCode, Set<WebSocket>>
 const rooms = new Map();
+const analyticsClients = new Set();
+
+// Helper to broadcast analytics updates
+function broadcastAnalyticsUpdate(event, data) {
+  const payload = JSON.stringify({ type: event, ...data });
+  analyticsClients.forEach(ws => {
+    if (ws.readyState === 1) ws.send(payload);
+  });
+}
+
+// ── Live IoT Telemetry Simulator ─────────────────────────────────────────────
+setInterval(() => {
+  if (analyticsClients.size === 0) return;
+  const isAnomaly = Math.random() > 0.85;
+  
+  // Normal vibration range is 2.0 - 5.0. Anomaly goes up to 15.0!
+  const vibration = isAnomaly ? (10 + Math.random() * 5).toFixed(2) : (2 + Math.random() * 3).toFixed(2);
+  const temp = (60 + Math.random() * 20).toFixed(1);
+  
+  broadcastAnalyticsUpdate("telemetry", {
+    asset: "P-101",
+    metrics: { vibration: parseFloat(vibration), temperature: parseFloat(temp) },
+    status: isAnomaly ? "critical" : "nominal",
+    timestamp: new Date().toISOString()
+  });
+}, 3000);
 
 function setupSignaling(server) {
-  const wss = new WebSocketServer({ server, path: "/ws/collab" });
+  const wss = new WebSocketServer({ noServer: true });
+  
+  server.on('upgrade', (request, socket, head) => {
+    const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+    if (pathname === '/ws/collab' || pathname === '/ws/analytics') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    const pathname = new URL(req.url, `http://${req.headers.host}`).pathname;
+    
+    if (pathname === '/ws/analytics') {
+      analyticsClients.add(ws);
+      ws.on("close", () => analyticsClients.delete(ws));
+      ws.on("error", () => analyticsClients.delete(ws));
+      return;
+    }
+
+    // Collab logic
     ws.roomCode = null;
     ws.peerId   = crypto.randomUUID();
 

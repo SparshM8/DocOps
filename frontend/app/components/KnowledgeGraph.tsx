@@ -92,19 +92,20 @@ export default function KnowledgeGraph({ token, onRunQuery }: { token: string, o
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           
-          // Color based on group
+          // Color and Glow based on group
           if (node.group === "document") ctx.fillStyle = "#60a5fa"; // blue-400
           else if (node.group === "equipment") ctx.fillStyle = "#c084fc"; // purple-400
           else if (node.group === "parameter") ctx.fillStyle = "#34d399"; // emerald-400
           else ctx.fillStyle = "#f87171"; // red-400 (safety)
 
+          ctx.shadowColor = ctx.fillStyle;
+          ctx.shadowBlur = 12;
+
           // Highlight selected node
           if (selectedNode && selectedNode.id === node.id) {
             ctx.fillStyle = "#fbbf24"; // amber-400
             ctx.shadowColor = "#fbbf24";
-            ctx.shadowBlur = 10;
-          } else {
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = 24;
           }
 
           ctx.fillText(label, node.x, node.y);

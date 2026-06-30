@@ -6,6 +6,7 @@ import { C, Icon } from "./Theme";
 const NAV = [
   { id: "dashboard", icon: "dashboard",   label: "Dashboard"   },
   { id: "copilot",   icon: "smart_toy",   label: "AI Copilot"  },
+  { id: "scanner",   icon: "qr_code_scanner", label: "AR Scanner"  },
   { id: "documents", icon: "description", label: "Documents"   },
   { id: "analytics", icon: "analytics",   label: "Analytics"   },
   { id: "team",      icon: "group",       label: "Team"        },

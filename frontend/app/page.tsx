@@ -11,6 +11,7 @@ import AnalyticsPage from "./components/AnalyticsPage";
 import ProfileSettings from "./components/ProfileSettings";
 import SettingsPage from "./components/SettingsPage";
 import CollabRoom from "./components/CollabRoom";
+import ARScannerModal from "./components/ARScannerModal";
 
 // ─── Auth Screen ──────────────────────────────────────────────────────────────
 function AuthScreen({ onLogin }: { onLogin: (token: string, user: any) => void }) {
@@ -227,8 +228,22 @@ export default function Page() {
             allTags={allTags}
             indexedCount={indexedCount}
             fetchDocs={fetchDocs}
+            initialQuery={activePath === "copilot" ? (window as any).__prefillQuery : undefined}
           />
         )}
+        
+        {/* AR Scanner Modal Overlay */}
+        {activePath === "scanner" && (
+          <ARScannerModal 
+            onClose={() => setActivePath("dashboard")}
+            onScan={(text) => {
+              // Usually the text might be an equipment tag, e.g. "P-101"
+              (window as any).__prefillQuery = `Show me the manual and RCA history for ${text}`;
+              setActivePath("copilot");
+            }}
+          />
+        )}
+
         {activePath === "documents" && (
           <DocumentsPage
             token={token}

@@ -4,14 +4,14 @@ import shutil
 import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# LangChain — Ollama (local, free, no API key)
-from langchain_ollama import ChatOllama, OllamaEmbeddings
+# LangChain — Google Gemini
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 
 # LangChain core
 from langchain_qdrant import QdrantVectorStore
@@ -32,12 +32,12 @@ from langchain_classic.retrievers import EnsembleRetriever
 load_dotenv()
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-OLLAMA_BASE_URL  = os.getenv("OLLAMA_BASE_URL",  "http://localhost:11434")
-OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2")
-OLLAMA_EMB_MODEL = os.getenv("OLLAMA_EMB_MODEL", "nomic-embed-text")
+GOOGLE_API_KEY   = os.getenv("GOOGLE_API_KEY", "")
+GEMINI_LLM_MODEL = os.getenv("GEMINI_LLM_MODEL", "gemini-1.5-flash")
+GEMINI_EMB_MODEL = os.getenv("GEMINI_EMB_MODEL", "models/embedding-001")
 
 QDRANT_URL    = os.getenv("QDRANT_URL",  "local")
-QDRANT_PATH   = os.path.join(os.path.dirname(__file__), "qdrant_data")
+QDRANT_PATH   = os.getenv("QDRANT_PATH", os.path.join(os.path.dirname(__file__), "qdrant_data"))
 QDRANT_APIKEY = os.getenv("QDRANT_API_KEY", "")
 COLLECTION    = "docops_manuals"
 EMBED_DIM     = 768   # nomic-embed-text dimension
@@ -45,17 +45,13 @@ EMBED_DIM     = 768   # nomic-embed-text dimension
 # Query history log
 QUERY_LOG = os.path.join(os.path.dirname(__file__), "query_history.jsonl")
 
-# ── Ollama health check ────────────────────────────────────────────────────────
-def check_ollama():
-    import urllib.request
-    try:
-        urllib.request.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
-        return True
-    except Exception:
-        return False
+# ── Health check ────────────────────────────────────────────────────────
+def check_api_key():
+    return bool(GOOGLE_API_KEY)
 
 # ── Qdrant setup ───────────────────────────────────────────────────────────────
-os.makedirs(QDRANT_PATH, exist_ok=True)
+if QDRANT_PATH != ":memory:":
+    os.makedirs(QDRANT_PATH, exist_ok=True)
 
 if QDRANT_URL == "local":
     qdrant_client = QdrantClient(path=QDRANT_PATH)
@@ -78,7 +74,7 @@ def ensure_collection():
 ensure_collection()
 
 # ── AI clients ─────────────────────────────────────────────────────────────────
-OFFLINE_MOCK_MODE = not check_ollama()
+OFFLINE_MOCK_MODE = not check_api_key()
 
 class MockEmbeddings:
     def embed_documents(self, texts):
@@ -87,22 +83,21 @@ class MockEmbeddings:
         return [0.0] * EMBED_DIM
 
 if OFFLINE_MOCK_MODE:
-    print("WARNING: Ollama is offline! Starting in OFFLINE MOCK MODE.")
+    print("WARNING: GOOGLE_API_KEY is missing! Starting in OFFLINE MOCK MODE.")
     embeddings = MockEmbeddings()
     llm = None
     vector_store = None
     agent = None
 else:
     try:
-        embeddings = OllamaEmbeddings(
-            model=OLLAMA_EMB_MODEL,
-            base_url=OLLAMA_BASE_URL,
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model=GEMINI_EMB_MODEL,
+            google_api_key=GOOGLE_API_KEY,
         )
-        llm = ChatOllama(
-            model=OLLAMA_LLM_MODEL,
-            base_url=OLLAMA_BASE_URL,
+        llm = ChatGoogleGenerativeAI(
+            model=GEMINI_LLM_MODEL,
+            google_api_key=GOOGLE_API_KEY,
             temperature=0.1,
-            streaming=True,
         )
         vector_store = QdrantVectorStore(
             client=qdrant_client,
@@ -110,7 +105,7 @@ else:
             embedding=embeddings,
         )
     except Exception as e:
-        print(f"Error connecting to Ollama: {e}. Falling back to OFFLINE MOCK MODE.")
+        print(f"Error connecting to Gemini: {e}. Falling back to OFFLINE MOCK MODE.")
         OFFLINE_MOCK_MODE = True
         embeddings = MockEmbeddings()
         llm = None
@@ -389,17 +384,17 @@ def mock_rca_analysis(equipment_tag: str) -> str:
 async def lifespan(app: FastAPI):
     if not OFFLINE_MOCK_MODE:
         ensure_collection()
-    ollama_ok = check_ollama()
-    if not ollama_ok:
-        print("WARNING: Ollama is not running! Started in offline/mock mode.")
+    api_ok = check_api_key()
+    if not api_ok:
+        print("WARNING: GOOGLE_API_KEY is missing! Started in offline/mock mode.")
     else:
-        print(f"Ollama connected at {OLLAMA_BASE_URL}")
-        print(f"   LLM: {OLLAMA_LLM_MODEL} | Embeddings: {OLLAMA_EMB_MODEL}")
+        print(f"Gemini connected using API key.")
+        print(f"   LLM: {GEMINI_LLM_MODEL} | Embeddings: {GEMINI_EMB_MODEL}")
     yield
 
 app = FastAPI(
     title="DocOps AI Engine",
-    description="Industrial Knowledge AI Platform — Powered by Ollama + LangGraph",
+    description="Industrial Knowledge AI Platform — Powered by Google Gemini",
     version="2.4.0",
     lifespan=lifespan,
 )
@@ -421,7 +416,7 @@ class DeleteDocRequest(BaseModel):
 # ── Health ─────────────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    ollama_ok = not OFFLINE_MOCK_MODE
+    api_ok = not OFFLINE_MOCK_MODE
     vector_count = 0
     if not OFFLINE_MOCK_MODE:
         try:
@@ -433,10 +428,10 @@ async def health():
         vector_count = len(load_offline_docs()) * 12 # Estimate chunks
 
     return {
-        "status":       "ok" if (ollama_ok or OFFLINE_MOCK_MODE) else "degraded",
-        "ollama":       "connected" if ollama_ok else "offline (mock mode enabled)",
-        "llm_model":    OLLAMA_LLM_MODEL,
-        "embed_model":  OLLAMA_EMB_MODEL,
+        "status":       "ok" if (api_ok or OFFLINE_MOCK_MODE) else "degraded",
+        "gemini":       "connected" if api_ok else "offline (mock mode enabled)",
+        "llm_model":    GEMINI_LLM_MODEL,
+        "embed_model":  GEMINI_EMB_MODEL,
         "vector_count": vector_count,
         "collection":   COLLECTION,
         "offline_mock": OFFLINE_MOCK_MODE
@@ -488,20 +483,45 @@ async def stats():
 async def upload_document(file: UploadFile = File(...)):
     global bm25_retriever
     if file.filename.lower().endswith((".png", ".jpg", ".jpeg")):
-        # --- Vision Pipeline Mock ---
+        # --- Gemini Vision Pipeline ---
         temp_path = f"temp_img_{file.filename}"
         try:
             with open(temp_path, "wb") as buf:
                 shutil.copyfileobj(file.file, buf)
                 
-            import random
-            extracted_tags = [f"V-{random.randint(100, 999)}", f"P-{random.randint(100, 999)}", "T-500"]
             entities = {
-                "equipment_tags": extracted_tags, 
-                "process_parameters": ["Flow", "Pressure"], 
+                "equipment_tags": [], 
+                "process_parameters": [], 
                 "safety_standards": []
             }
             
+            if not OFFLINE_MOCK_MODE and llm is not None:
+                import base64
+                with open(temp_path, "rb") as f:
+                    img_b64 = base64.b64encode(f.read()).decode('utf-8')
+                
+                try:
+                    from langchain_core.messages import HumanMessage
+                    import json
+                    msg = llm.invoke([
+                        HumanMessage(content=[
+                            {"type": "text", "text": "Extract industrial equipment tags (like P-101, V-200), process parameters (like Flow, Pressure), and safety standards from this P&ID diagram. Return ONLY a JSON dictionary with keys 'equipment_tags', 'process_parameters', 'safety_standards'. Do not use markdown backticks, return pure JSON string."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                        ])
+                    ])
+                    text = msg.content.strip()
+                    if text.startswith("```json"): text = text[7:-3]
+                    elif text.startswith("```"): text = text[3:-3]
+                    parsed = json.loads(text.strip())
+                    entities.update(parsed)
+                except Exception as e:
+                    print("Vision extraction failed:", e)
+            else:
+                import random
+                entities["equipment_tags"] = [f"V-{random.randint(100, 999)}", f"P-{random.randint(100, 999)}", "T-500"]
+                entities["process_parameters"] = ["Flow", "Pressure"]
+            
+            extracted_tags = entities.get("equipment_tags", [])
             dummy_text = f"P&ID Diagram / Schematic: {file.filename}. Visually extracted equipment tags: {', '.join(extracted_tags)}"
             update_graph_from_entities(file.filename, entities, is_diagram=True)
             
@@ -765,6 +785,62 @@ async def get_query_history(limit: int = 50):
 @app.get("/graph")
 async def get_graph_data():
     return knowledge_graph
+
+@app.get("/generate-report")
+async def generate_report():
+    if OFFLINE_MOCK_MODE or llm is None:
+        return {"report": "# Executive Report\n\n(AI Mock Mode: Could not generate report. Please configure Gemini API key in .env)"}
+    
+    try:
+        # Gather all recent queries
+        queries = []
+        if os.path.exists(QUERY_LOG):
+            with open(QUERY_LOG) as f:
+                queries = [json.loads(l).get("query") for l in f.readlines()[-20:] if l.strip()]
+        
+        # Ask Gemini to generate a report based on the Knowledge Graph and recent queries
+        from langchain_core.messages import HumanMessage
+        prompt = f"""
+        You are the DocOps AI Engine, an industrial reliability expert.
+        Generate a professional Markdown 'Executive Lessons Learned Report'.
+        
+        Current Knowledge Graph Summary (Extracted from manuals and P&ID diagrams):
+        {json.dumps(knowledge_graph)[:3000]}
+        
+        Recent Operator Queries (Last 20):
+        {json.dumps(queries)}
+        
+        Using the above data, write a report with the following structure:
+        1. System Overview (number of components)
+        2. Key Failure Trends (analyze the operator queries to find recurring themes or issues)
+        3. Recommended Actions (suggest maintenance, inspections, or documentation updates)
+        
+        Be concise, professional, and use bullet points. Make it sound highly intelligent.
+        """
+        
+        msg = llm.invoke([HumanMessage(content=prompt)])
+        return {"report": msg.content.strip()}
+    except Exception as e:
+        return {"report": f"# Error Generating Report\n\n{str(e)}"}
+
+@app.get("/export-vault")
+async def export_vault():
+    import shutil
+    import tempfile
+    
+    # Create a temporary zip file
+    tmp_dir = tempfile.mkdtemp()
+    zip_path = os.path.join(tmp_dir, "docops_vault")
+    
+    try:
+        shutil.make_archive(zip_path, 'zip', QDRANT_PATH)
+        return FileResponse(
+            path=f"{zip_path}.zip",
+            media_type="application/zip",
+            filename="docops_vault_backup.zip"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

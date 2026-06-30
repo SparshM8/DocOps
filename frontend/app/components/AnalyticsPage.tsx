@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { C, S, Icon } from "./Theme";
+import ReactMarkdown from "react-markdown";
 
 interface AnalyticsProps {
   token: string;
@@ -17,27 +18,50 @@ export default function AnalyticsPage({ token, docs }: AnalyticsProps) {
 
   const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:3001";
 
-  useEffect(() => {
-    async function fetchQueryHistory() {
-      try {
-        const res = await fetch(`${GATEWAY}/api/query-history`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setHistory(data.queries || []);
-        }
-      } catch (err) {
-        console.error("Failed to load query logs", err);
-      } finally {
-        setLoading(false);
+  const fetchQueryHistory = async () => {
+    try {
+      const res = await fetch(`${GATEWAY}/api/query-history`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data.queries || []);
       }
+    } catch (err) {
+      console.error("Failed to load query logs", err);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    if (token) {
-      fetchQueryHistory();
-    }
+  useEffect(() => {
+    if (token) fetchQueryHistory();
   }, [token, GATEWAY]);
+
+  const [liveEvent, setLiveEvent] = useState<{ text: string, type: "doc" | "query" } | null>(null);
+  const [telemetry, setTelemetry] = useState<{ asset: string, metrics: { vibration: number, temperature: number }, status: "critical" | "nominal", timestamp: string } | null>(null);
+
+  useEffect(() => {
+    const wsUrl = GATEWAY.replace("http", "ws") + "/ws/analytics";
+    const ws = new WebSocket(wsUrl);
+    
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === "new_document") {
+          setLiveEvent({ text: `New document indexed: ${msg.name}`, type: "doc" });
+          setTimeout(() => setLiveEvent(null), 5000);
+        } else if (msg.type === "new_query") {
+          setLiveEvent({ text: `New search activity: "${msg.query}"`, type: "query" });
+          setTimeout(() => setLiveEvent(null), 5000);
+          fetchQueryHistory();
+        } else if (msg.type === "telemetry") {
+          setTelemetry(msg);
+        }
+      } catch (err) {}
+    };
+    return () => ws.close();
+  }, [GATEWAY]);
 
   // Aggregate entity metrics
   let totalEquipment = 0;
@@ -78,17 +102,81 @@ export default function AnalyticsPage({ token, docs }: AnalyticsProps) {
   return (
     <div style={{ padding: 28, overflowY: "auto", minHeight: "100%" }}>
       {/* Title */}
-      <div style={{ marginBottom: 28 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 800, color: C.text }}>System Analytics & Metrics</h2>
-        <p style={{ color: C.muted, fontSize: 14, marginTop: 4 }}>
-          Monitor entity density distributions and recent operator search patterns.
-        </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
+        <div>
+          <h2 style={{ fontSize: 28, fontWeight: 800, color: C.text }}>System Analytics & Metrics</h2>
+          <p style={{ color: C.muted, fontSize: 14, marginTop: 4 }}>
+            Monitor entity density distributions and recent operator search patterns.
+          </p>
+        </div>
+        
+        {/* Live Event Indicator */}
+        {liveEvent && (
+          <div className="fade-up" style={{
+            background: liveEvent.type === "doc" ? "rgba(78,222,163,0.15)" : "rgba(77,142,255,0.15)",
+            border: `1px solid ${liveEvent.type === "doc" ? "rgba(78,222,163,0.3)" : "rgba(77,142,255,0.3)"}`,
+            padding: "8px 16px", borderRadius: 100, display: "flex", alignItems: "center", gap: 8,
+            color: liveEvent.type === "doc" ? C.accent : C.primary, fontSize: 13, fontWeight: 700
+          }}>
+            <Icon name={liveEvent.type === "doc" ? "description" : "search"} size={16} />
+            {liveEvent.text}
+            <span style={{ display: "inline-block", width: 8, height: 8, background: liveEvent.type === "doc" ? C.accent : C.primary, borderRadius: "50%", marginLeft: 4, animation: "pulse 1.5s infinite" }} />
+          </div>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.9fr", gap: 24 }}>
         
-        {/* Left Side: Entity Distributions */}
+        {/* Left Side: Entity Distributions & Telemetry */}
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          
+          {/* Live IoT Telemetry Simulator */}
+          <div style={{ ...S.card, padding: 24, border: telemetry?.status === "critical" ? "2px solid rgba(248,113,113,0.6)" : `1px solid ${C.border}`, position: "relative", overflow: "hidden" }}>
+            {telemetry?.status === "critical" && (
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(248,113,113,0.1)", animation: "pulse 1s infinite", pointerEvents: "none" }} />
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h3 style={{ fontSize: 17, fontWeight: 800, display: "flex", alignItems: "center", gap: 8, color: telemetry?.status === "critical" ? "#f87171" : C.text }}>
+                <Icon name="sensors" size={20} color={telemetry?.status === "critical" ? "#f87171" : C.primary} />
+                Live IoT Telemetry
+              </h3>
+              {telemetry && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: telemetry.status === "critical" ? "#f87171" : "#34d399", background: telemetry.status === "critical" ? "rgba(248,113,113,0.1)" : "rgba(52,211,153,0.1)", padding: "4px 10px", borderRadius: 100, textTransform: "uppercase" }}>
+                  {telemetry.status}
+                </span>
+              )}
+            </div>
+
+            {!telemetry ? (
+              <div style={{ textAlign: "center", padding: "30px 0", color: C.muted, fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <Icon name="settings_input_antenna" size={24} color={C.muted} />
+                Awaiting sensor data...
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div style={{ background: "rgba(255,255,255,0.03)", padding: 16, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 12, color: C.muted, fontWeight: 600, marginBottom: 4 }}>Asset Tag</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{telemetry.asset}</div>
+                </div>
+                <div style={{ background: "rgba(255,255,255,0.03)", padding: 16, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 12, color: C.muted, fontWeight: 600, marginBottom: 4 }}>Temperature</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{telemetry.metrics.temperature}°C</div>
+                </div>
+                <div style={{ background: telemetry.status === "critical" ? "rgba(248,113,113,0.15)" : "rgba(255,255,255,0.03)", padding: 16, borderRadius: 12, border: telemetry.status === "critical" ? "1px solid rgba(248,113,113,0.3)" : `1px solid ${C.border}`, gridColumn: "span 2" }}>
+                  <div style={{ fontSize: 12, color: telemetry.status === "critical" ? "#f87171" : C.muted, fontWeight: 600, marginBottom: 4 }}>Vibration (mm/s)</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: telemetry.status === "critical" ? "#f87171" : C.text }}>
+                    {telemetry.metrics.vibration.toFixed(2)}
+                  </div>
+                  {telemetry.status === "critical" && (
+                    <div style={{ fontSize: 11, color: "#f87171", marginTop: 4, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                      <Icon name="warning" size={14} /> Critical anomaly detected. AI RCA recommended.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div style={{ ...S.card, padding: 24 }}>
             <h3 style={{ fontSize: 17, fontWeight: 800, marginBottom: 20 }}>Entity Density Distribution</h3>
             
@@ -240,8 +328,8 @@ export default function AnalyticsPage({ token, docs }: AnalyticsProps) {
                 <Icon name="close" size={24} color={C.text} />
               </button>
             </div>
-            <div style={{ fontSize: 14, lineHeight: 1.6, color: C.text, whiteSpace: "pre-wrap", background: C.surf2, padding: 20, borderRadius: 10, border: `1px solid ${C.border}` }}>
-              {report}
+            <div style={{ fontSize: 14, lineHeight: 1.6, color: C.text, background: C.surf2, padding: 20, borderRadius: 10, border: `1px solid ${C.border}` }}>
+              <ReactMarkdown>{report}</ReactMarkdown>
             </div>
             <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
               <button onClick={() => setShowModal(false)} style={{ ...S.btnPrimary, padding: "10px 20px" }}>
