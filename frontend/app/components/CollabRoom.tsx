@@ -374,7 +374,7 @@ export default function CollabRoom({ user, isActivePage = true, onNavigate, onQu
             background: "rgba(77,142,255,0.08)", border: `1px solid rgba(77,142,255,0.15)`,
             display: "grid", placeItems: "center", marginBottom: 24
           }}>
-            <Icon name="contact_sharing" size={38} color={C.primary} />
+            <Icon name="video_chat" size={38} color={C.primary} />
           </div>
           <h3 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: "0 0 12px 0" }}>Start collaborating</h3>
           <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6, margin: "0 0 32px 0", maxWidth: 440 }}>
