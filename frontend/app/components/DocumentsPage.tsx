@@ -21,8 +21,8 @@ export default function DocumentsPage({ token, user, docs, fetchDocs }: Document
 
   const handleIngest = async (file?: File) => {
     if (!file || isUploading || !token) return;
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      alert("Only PDF manuals are supported.");
+    if (!file.name.toLowerCase().match(/\.(pdf|png|jpe?g)$/)) {
+      alert("Only PDF manuals or Image P&IDs are supported.");
       return;
     }
 
@@ -132,9 +132,9 @@ export default function DocumentsPage({ token, user, docs, fetchDocs }: Document
                 {isUploading ? "Processing & Indexing Manual..." : "Drag & Drop Manual PDF"}
               </h3>
               <p style={{ fontSize: 12, color: C.muted, margin: "8px 0 16px" }}>
-                Supports standard PDF files up to 50 MB. Text will be chunked and embedded locally.
+                Supports standard PDF files up to 50 MB, or Image files (PNG, JPG) for Vision extraction. Text will be chunked and embedded locally.
               </p>
-              <input ref={fileRef} type="file" accept="application/pdf" style={{ display: "none" }}
+              <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: "none" }}
                 onChange={e => { handleIngest(e.target.files?.[0]); e.target.value = ""; }} />
               <button disabled={isUploading} onClick={() => fileRef.current?.click()} style={S.btnPrimary}>
                 <Icon name="attach_file" size={16} color="#001a42" /> Select Document

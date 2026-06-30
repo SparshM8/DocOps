@@ -144,12 +144,20 @@ const db = {
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "2mb" }));
 
+const UPLOADS_DIR = path.join(__dirname, "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+    filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+  }),
   limits: { fileSize: 50 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
-    const ok = file.mimetype === "application/pdf" || file.originalname.toLowerCase().endsWith(".pdf");
-    cb(ok ? null : new Error("Only PDF files are supported."), ok);
+    const ext = path.extname(file.originalname).toLowerCase();
+    const ok = file.mimetype === "application/pdf" || ext === ".pdf" ||
+               file.mimetype.startsWith("image/") || [".png", ".jpg", ".jpeg"].includes(ext);
+    cb(ok ? null : new Error("Only PDF and Image files are supported."), ok);
   },
 });
 
@@ -329,7 +337,8 @@ app.post("/api/upload", requireAuth, requireRole(["plant_manager"]), upload.sing
 
     // Forward to Python AI engine
     const form = new FormData();
-    form.append("file", new Blob([req.file.buffer], { type: "application/pdf" }), req.file.originalname);
+    const fileBuffer = fs.readFileSync(req.file.path);
+    form.append("file", new Blob([fileBuffer], { type: req.file.mimetype || "application/octet-stream" }), req.file.originalname);
 
     let data;
     try {
@@ -338,6 +347,9 @@ app.post("/api/upload", requireAuth, requireRole(["plant_manager"]), upload.sing
     } catch (pyErr) {
       await db.updateDoc(docId, { status: "failed" });
       return next(pyErr);
+    } finally {
+      // Clean up the uploaded file to free disk space
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
     }
 
     docRecord = await db.updateDoc(docId, {

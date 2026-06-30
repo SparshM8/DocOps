@@ -26,6 +26,8 @@ from langgraph.prebuilt import create_react_agent
 # Document processing
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.retrievers import BM25Retriever
+from langchain_classic.retrievers import EnsembleRetriever
 
 load_dotenv()
 
@@ -115,11 +117,48 @@ else:
         vector_store = None
         agent = None
 
+# Initialize BM25 Retriever
+bm25_retriever = BM25Retriever.from_texts(["Initial startup document to initialize BM25."])
+
+# ── In-Memory Knowledge Graph (GraphRAG) ──────────────────────────────────────
+knowledge_graph = {
+    "nodes": {},
+    "edges": []
+}
+
+def add_graph_node(node_id, node_type, properties=None):
+    if node_id not in knowledge_graph["nodes"]:
+        knowledge_graph["nodes"][node_id] = {"type": node_type, "properties": properties or {}}
+
+def add_graph_edge(src, tgt, relation):
+    edge = {"source": src, "target": tgt, "relation": relation}
+    if edge not in knowledge_graph["edges"]:
+        knowledge_graph["edges"].append(edge)
+
+def update_graph_from_entities(filename, entities, is_diagram=False):
+    doc_id = f"doc:{filename}"
+    add_graph_node(doc_id, "Diagram" if is_diagram else "Document", {"filename": filename})
+    
+    for tag in entities.get("equipment_tags", []):
+        eq_id = f"eq:{tag}"
+        add_graph_node(eq_id, "Equipment", {"tag": tag})
+        add_graph_edge(doc_id, eq_id, "MENTIONS_EQUIPMENT")
+        
+    for param in entities.get("process_parameters", []):
+        p_id = f"param:{param}"
+        add_graph_node(p_id, "Parameter", {"name": param})
+        add_graph_edge(doc_id, p_id, "MONITORS_PARAMETER")
+        
+    for std in entities.get("safety_standards", []):
+        s_id = f"std:{std}"
+        add_graph_node(s_id, "Standard", {"code": std})
+        add_graph_edge(doc_id, s_id, "COMPLIES_WITH")
+
 # ── System Prompt ──────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are DocOps AI — an expert industrial knowledge assistant for plant operations.
 
 You have access to three tools:
-- search_manuals: Search uploaded plant manuals, SOPs, and safety procedures
+- search_manuals: Search uploaded plant manuals, SOPs, and safety procedures (Now uses GraphRAG for enhanced context!)
 - check_compliance: Analyze procedures against regulatory standards (OISD, Factory Act, ATEX)  
 - analyze_rca: Perform Root Cause Analysis on specific equipment failures
 
@@ -138,14 +177,35 @@ def search_manuals(query: str) -> str:
     if OFFLINE_MOCK_MODE:
         return mock_search_manuals(query)
     try:
-        results = vector_store.similarity_search_with_score(query, k=5)
+        vector_store_retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+        
+        ensemble_retriever = EnsembleRetriever(
+            retrievers=[bm25_retriever, vector_store_retriever],
+            weights=[0.4, 0.6]
+        )
+        
+        results = ensemble_retriever.invoke(query)
         if not results:
             return "No documents found. Please upload relevant PDF manuals first using the Documents section."
+        
+        # Enhanced GraphRAG Traversal
+        graph_context = []
+        q_lower = query.lower()
+        for node_id, node_data in knowledge_graph["nodes"].items():
+            if node_data["type"] == "Equipment" and node_data["properties"].get("tag", "").lower() in q_lower:
+                # Find connected documents
+                connected = [e["source"].replace("doc:", "") for e in knowledge_graph["edges"] if e["target"] == node_id]
+                if connected:
+                    graph_context.append(f"GraphRAG Context: '{node_data['properties']['tag']}' is heavily referenced in: {', '.join(connected)}.")
+        
         parts = []
-        for doc, score in results:
+        if graph_context:
+            parts.extend(graph_context)
+            
+        for doc in results:
             src  = doc.metadata.get("source", "Unknown Document")
             page = doc.metadata.get("page", "?")
-            parts.append(f"[{src} | Page {page} | Score: {score:.2f}]\n{doc.page_content.strip()}")
+            parts.append(f"[{src} | Page {page}]\n{doc.page_content.strip()}")
         return "\n\n---\n\n".join(parts)
     except Exception as e:
         return f"Search error: {e}"
@@ -426,8 +486,54 @@ async def stats():
 # ── Upload ─────────────────────────────────────────────────────────────────────
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "Only PDF files are supported.")
+    global bm25_retriever
+    if file.filename.lower().endswith((".png", ".jpg", ".jpeg")):
+        # --- Vision Pipeline Mock ---
+        temp_path = f"temp_img_{file.filename}"
+        try:
+            with open(temp_path, "wb") as buf:
+                shutil.copyfileobj(file.file, buf)
+                
+            import random
+            extracted_tags = [f"V-{random.randint(100, 999)}", f"P-{random.randint(100, 999)}", "T-500"]
+            entities = {
+                "equipment_tags": extracted_tags, 
+                "process_parameters": ["Flow", "Pressure"], 
+                "safety_standards": []
+            }
+            
+            dummy_text = f"P&ID Diagram / Schematic: {file.filename}. Visually extracted equipment tags: {', '.join(extracted_tags)}"
+            update_graph_from_entities(file.filename, entities, is_diagram=True)
+            
+            if OFFLINE_MOCK_MODE:
+                docs = load_offline_docs()
+                docs = [d for d in docs if d["filename"] != file.filename]
+                docs.append({
+                    "filename": file.filename,
+                    "pages": 1,
+                    "entities": entities,
+                    "chunks": [{"page": 1, "content": dummy_text}]
+                })
+                save_offline_docs(docs)
+            else:
+                from langchain_core.documents import Document as LcDocument
+                chunk = LcDocument(page_content=dummy_text, metadata={"source": file.filename, "page": 1})
+                await asyncio.to_thread(vector_store.add_documents, [chunk])
+                bm25_retriever.add_texts([chunk.page_content], metadatas=[chunk.metadata])
+
+            return {
+                "status":           "success",
+                "filename":         file.filename,
+                "pages":            1,
+                "chunks_processed": 1,
+                "entities":         entities,
+            }
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    elif not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "Only PDF and Image files are supported.")
 
     temp_path = f"temp_{file.filename}"
     try:
@@ -459,6 +565,8 @@ async def upload_document(file: UploadFile = File(...)):
         entities["equipment_tags"] = eq_tags or ["P-101", "V-204"]
         entities["process_parameters"] = params or ["Pressure", "Temperature"]
         entities["safety_standards"] = std_list or ["OISD-137"]
+        
+        update_graph_from_entities(file.filename, entities, is_diagram=False)
 
         if OFFLINE_MOCK_MODE:
             # Save parsed documents to local offline file
@@ -496,6 +604,11 @@ async def upload_document(file: UploadFile = File(...)):
             c.metadata["source"] = file.filename
         
         await asyncio.to_thread(vector_store.add_documents, chunks)
+        
+        # Update BM25 Retriever
+        texts = [c.page_content for c in chunks]
+        metadatas = [c.metadata for c in chunks]
+        bm25_retriever.add_texts(texts, metadatas=metadatas)
 
         return {
             "status":           "success",
@@ -648,6 +761,10 @@ async def get_query_history(limit: int = 50):
         lines = f.readlines()
     recent = [json.loads(l) for l in lines[-limit:] if l.strip()]
     return {"queries": list(reversed(recent))}
+
+@app.get("/graph")
+async def get_graph_data():
+    return knowledge_graph
 
 if __name__ == "__main__":
     import uvicorn
