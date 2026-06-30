@@ -5,6 +5,8 @@ import { C, Icon } from "./Theme";
 
 interface CollabRoomProps {
   user: any;
+  isActivePage?: boolean;
+  onNavigate?: () => void;
   onQuerySync?: (query: string) => void;  // Called when remote peer sends a query
 }
 
@@ -14,7 +16,7 @@ type ChatEntry = { from: string; text: string; ts: number; };
 const STUN = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
 const GATEWAY_WS = (process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:3001").replace("http", "ws");
 
-export default function CollabRoom({ user, onQuerySync }: CollabRoomProps) {
+export default function CollabRoom({ user, isActivePage = true, onNavigate, onQuerySync }: CollabRoomProps) {
   // UI states
   const [open, setOpen]               = useState(false);
   const [phase, setPhase]             = useState<"idle" | "lobby" | "connecting" | "live">("idle");
@@ -252,6 +254,47 @@ export default function CollabRoom({ user, onQuerySync }: CollabRoomProps) {
   const genRoomCode = () => setRoomInput(Math.random().toString(36).substring(2, 6).toUpperCase());
 
   // ── Render ────────────────────────────────────────────────────────────────
+  
+  if (!isActivePage) {
+    if (phase !== "live") return null;
+
+    // Floating PiP when active in another tab
+    return (
+      <div style={{
+        position: "fixed", bottom: 28, right: 28, zIndex: 5000,
+        width: 240, background: "rgba(10,15,28,0.9)",
+        backdropFilter: "blur(16px)", border: `1px solid rgba(77,142,255,0.4)`,
+        borderRadius: 16, overflow: "hidden",
+        boxShadow: "0 10px 40px rgba(0,0,0,0.6), 0 0 0 2px rgba(77,142,255,0.2)",
+        display: "flex", flexDirection: "column",
+        animation: "fadeIn 0.3s ease",
+      }}>
+        <div style={{ padding: "8px 12px", background: "rgba(0,0,0,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, textTransform: "uppercase", letterSpacing: 1, display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 6, height: 6, background: C.accent, borderRadius: "50%", boxShadow: `0 0 6px ${C.accent}` }} />
+            Live
+          </span>
+          <button onClick={onNavigate} style={{
+            background: "none", border: "none", color: C.primary, cursor: "pointer", display: "flex", padding: 4
+          }} title="Return to Team Room">
+            <Icon name="open_in_full" size={16} />
+          </button>
+        </div>
+        
+        {/* Render a tiny version of the first peer's video, or waiting state */}
+        <div style={{ aspectRatio: "4/3", background: "#000", position: "relative" }}>
+          {peers.length > 0 ? (
+            <RemoteVideo peer={peers[0]} />
+          ) : (
+            <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: C.muted }}>
+              <Icon name="person_add" size={24} />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       padding: "32px 40px",

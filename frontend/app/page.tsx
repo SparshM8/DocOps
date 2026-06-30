@@ -243,19 +243,6 @@ export default function Page() {
             docs={docs}
           />
         )}
-        {activePath === "team" && (
-          <CollabRoom
-            user={user}
-            onQuerySync={(q) => {
-              setActivePath("copilot");
-              setTimeout(() => {
-                sessionStorage.setItem("pending_copilot_query", q);
-                const form = document.getElementById("copilot-form") as HTMLFormElement;
-                if (form) form.requestSubmit();
-              }, 300);
-            }}
-          />
-        )}
         {activePath === "profile" && (
           <ProfileSettings
             user={user}
@@ -271,6 +258,21 @@ export default function Page() {
         {activePath === "settings" && (
           <SettingsPage user={user} />
         )}
+
+        {/* Unconditionally mount CollabRoom so WebRTC connection persists when navigating tabs */}
+        <CollabRoom
+          user={user}
+          isActivePage={activePath === "team"}
+          onNavigate={() => setActivePath("team")}
+          onQuerySync={(q) => {
+            setActivePath("copilot");
+            setTimeout(() => {
+              sessionStorage.setItem("pending_copilot_query", q);
+              const form = document.getElementById("copilot-form") as HTMLFormElement;
+              if (form) form.requestSubmit();
+            }, 300);
+          }}
+        />
       </main>
     </div>
   );
