@@ -9,4 +9,7 @@
 {"query": "What is the max allowable working pressure for V-305?", "timestamp": "2026-06-29T10:23:35.660804Z", "response_tokens": 393, "model": "llama3.2"}
 {"query": "Compliance gaps in our current ATEX Zone-1 procedures", "timestamp": "2026-06-28T11:23:35.660804Z", "response_tokens": 475, "model": "llama3.2"}
 {"query": "How to perform a mechanical seal replacement on P-103?", "timestamp": "2026-06-30T05:23:35.660804Z", "response_tokens": 349, "model": "llama3.2"}
-{"query": "Reflux ratio setpoints during distillation column startup", "timestamp": "2026-06-29T07:23:35.660804Z", "response_tokens": 248, "model": "llama3.2"}
+{"query": "Reflux ratio setpoints during distillation column startup", "timestamp": "2026-06-29T07:23:35.660804Z", "response_tokens": 248, "model": "llama3.2"}{"ts": "2026-06-30T17:32:44.143251", "query": "What is the startup procedure for Reactor R-501?", "sid": null}
+{"ts": "2026-06-30T17:33:06.583690", "query": "Show me the OISD-137 compliance checklist", "sid": null}
+{"ts": "2026-06-30T17:41:48.394867", "query": "Perform RCA on ESD-001", "sid": null}
+{"ts": "2026-06-30T17:42:14.398945", "query": "Perform RCA on C-501", "sid": null}

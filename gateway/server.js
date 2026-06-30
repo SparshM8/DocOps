@@ -13,6 +13,8 @@ const crypto   = require("crypto");
 const User     = require("./models/User");
 const Document = require("./models/Document");
 const AuditLog = require("./models/AuditLog");
+const http     = require("http");
+const { WebSocketServer } = require("ws");
 
 const app            = express();
 const PORT           = Number(process.env.PORT) || 3001;
@@ -522,12 +524,98 @@ app.use((err, _req, res, _next) => {
   return res.status(status).json({ detail: err.message || "Gateway error" });
 });
 
+// ── WebRTC Signaling Server ───────────────────────────────────────────────────
+// Rooms: Map<roomCode, Set<WebSocket>>
+const rooms = new Map();
+
+function setupSignaling(server) {
+  const wss = new WebSocketServer({ server, path: "/ws/collab" });
+
+  wss.on("connection", (ws) => {
+    ws.roomCode = null;
+    ws.peerId   = crypto.randomUUID();
+
+    ws.on("message", (raw) => {
+      let msg;
+      try { msg = JSON.parse(raw); } catch { return; }
+
+      switch (msg.type) {
+        case "join": {
+          const code = String(msg.room || "").toUpperCase().trim();
+          if (!code) return;
+          ws.roomCode = code;
+          ws.userName = msg.username || "Anonymous";
+          if (!rooms.has(code)) rooms.set(code, new Set());
+          const room = rooms.get(code);
+          // Tell existing peers a new user joined
+          room.forEach(peer => {
+            if (peer !== ws && peer.readyState === 1) {
+              peer.send(JSON.stringify({ type: "peer-joined", peerId: ws.peerId, username: ws.userName }));
+            }
+          });
+          room.add(ws);
+          // Confirm to joiner + list current peers
+          const peers = [...room]
+            .filter(p => p !== ws)
+            .map(p => ({ peerId: p.peerId, username: p.userName }));
+          ws.send(JSON.stringify({ type: "joined", room: code, peerId: ws.peerId, peers }));
+          console.log(`[WS] ${ws.userName} joined room ${code} (${room.size} peers)`);
+          break;
+        }
+        case "offer":
+        case "answer":
+        case "ice-candidate":
+        case "data-sync": {
+          // Relay to target peer or broadcast to room
+          const room = rooms.get(ws.roomCode);
+          if (!room) return;
+          const payload = JSON.stringify({ ...msg, fromPeerId: ws.peerId, fromUsername: ws.userName });
+          room.forEach(peer => {
+            if (peer !== ws && peer.readyState === 1) {
+              if (!msg.toPeerId || msg.toPeerId === peer.peerId) {
+                peer.send(payload);
+              }
+            }
+          });
+          break;
+        }
+        case "leave": {
+          cleanupPeer(ws);
+          break;
+        }
+      }
+    });
+
+    ws.on("close", () => cleanupPeer(ws));
+    ws.on("error", () => cleanupPeer(ws));
+  });
+
+  function cleanupPeer(ws) {
+    if (!ws.roomCode) return;
+    const room = rooms.get(ws.roomCode);
+    if (!room) return;
+    room.delete(ws);
+    room.forEach(peer => {
+      if (peer.readyState === 1)
+        peer.send(JSON.stringify({ type: "peer-left", peerId: ws.peerId, username: ws.userName }));
+    });
+    if (room.size === 0) rooms.delete(ws.roomCode);
+    console.log(`[WS] ${ws.userName} left room ${ws.roomCode}`);
+    ws.roomCode = null;
+  }
+
+  console.log(`   WebRTC Signaling → ws://localhost:${PORT}/ws/collab`);
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {
   await connectDB();
-  app.listen(PORT, () => {
+  const server = http.createServer(app);
+  setupSignaling(server);
+  server.listen(PORT, () => {
     console.log(`\n🚀 DocOps Gateway → http://localhost:${PORT}`);
     console.log(`   AI Backend  → ${PYTHON_API_URL}`);
-    console.log(`   Health      → http://localhost:${PORT}/api/health\n`);
+    console.log(`   Health      → http://localhost:${PORT}/api/health`);
   });
 })();
+

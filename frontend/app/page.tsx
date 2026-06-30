@@ -10,6 +10,7 @@ import DocumentsPage from "./components/DocumentsPage";
 import AnalyticsPage from "./components/AnalyticsPage";
 import ProfileSettings from "./components/ProfileSettings";
 import SettingsPage from "./components/SettingsPage";
+import CollabRoom from "./components/CollabRoom";
 
 // ─── Auth Screen ──────────────────────────────────────────────────────────────
 function AuthScreen({ onLogin }: { onLogin: (token: string, user: any) => void }) {
@@ -272,12 +273,12 @@ export default function Page() {
         onClick={() => setActivePath("copilot")}
         title="Open AI Copilot"
         style={{
-          position: "fixed", bottom: 28, right: 28,
+          position: "fixed", bottom: 28, right: 100,
           width: 60, height: 60, borderRadius: "50%",
           background: `linear-gradient(135deg, ${C.primary}, #2563eb)`, color: "#ffffff",
           border: "none", boxShadow: `0 8px 24px rgba(77, 142, 255, 0.4)`,
           cursor: "pointer", display: "grid", placeItems: "center",
-          zIndex: 9999, fontSize: 28, fontFamily: "inherit",
+          zIndex: 4000, fontSize: 28, fontFamily: "inherit",
           transition: "transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
         }}
         onMouseOver={e => e.currentTarget.style.transform = "scale(1.05)"}
@@ -285,6 +286,19 @@ export default function Page() {
       >
         <Icon name="smart_toy" size={28} color="#ffffff" />
       </button>
+
+      {/* WebRTC Collaboration Room — always mounted, floating panel */}
+      <CollabRoom
+        user={user}
+        onQuerySync={(q) => {
+          setActivePath("copilot");
+          setTimeout(() => {
+            sessionStorage.setItem("pending_copilot_query", q);
+            const form = document.getElementById("copilot-form") as HTMLFormElement;
+            if (form) form.requestSubmit();
+          }, 300);
+        }}
+      />
     </div>
   );
 }

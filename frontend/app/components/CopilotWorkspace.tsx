@@ -3,6 +3,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { C, S, Icon } from "./Theme";
 import KnowledgeGraph from "./KnowledgeGraph";
+import VoiceModal from "./VoiceModal";
 
 interface CopilotProps {
   token: string;
@@ -33,8 +34,8 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
   const [isDragging, setIsDragging] = useState(false);
   const [input, setInput] = useState("");
   const [tab, setTab] = useState<"chat" | "graph">("chat");
-
-  const [isListening, setIsListening] = useState(false);
+  const [showVoice, setShowVoice] = useState(false);
+  const [voiceLang, setVoiceLang] = useState<"en-IN" | "hi-IN">("en-IN");
   const [readAloud, setReadAloud] = useState(false);
   const readAloudRef = useRef(false);
   useEffect(() => { readAloudRef.current = readAloud; }, [readAloud]);
@@ -178,27 +179,27 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
 
   const isManager = user?.role === "plant_manager";
 
-  const toggleListening = () => {
-    if (isListening) return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Voice input is not supported in your browser.");
-      return;
-    }
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    
-    recognition.onstart = () => setIsListening(true);
-    recognition.onresult = (e: any) => setInput(p => p ? p + " " + e.results[0][0].transcript : e.results[0][0].transcript);
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    
-    recognition.start();
+  const launchVoice = () => setShowVoice(true);
+  const handleVoiceTranscript = (text: string) => {
+    setInput(text);
+    // auto-submit after a tick so input state is applied
+    setTimeout(() => {
+      const form = document.getElementById("copilot-form") as HTMLFormElement;
+      if (form) form.requestSubmit();
+    }, 80);
   };
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 64px)", overflow: "hidden" }}>
+    <div style={{ display: "flex", height: "calc(100vh - 64px)", overflow: "hidden", background: "transparent" }}>
+      
+      {/* Voice Modal overlay */}
+      {showVoice && (
+        <VoiceModal
+          language={voiceLang}
+          onTranscript={handleVoiceTranscript}
+          onClose={() => setShowVoice(false)}
+        />
+      )}
       
       {/* Left: Documents Sidebar */}
       <aside style={{
@@ -301,34 +302,54 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
         {/* Tab Header */}
         <div style={{
           height: 56, display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "0 20px", background: "#fff", borderBottom: "1px solid #e2e8f0", flexShrink: 0,
+          padding: "0 20px",
+          background: "rgba(10,15,28,0.6)",
+          backdropFilter: "blur(16px)",
+          borderBottom: `1px solid rgba(255,255,255,0.07)`,
+          flexShrink: 0,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Icon name="smart_toy" size={22} color="#3b82f6" />
-            <span style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>AI Copilot Workspace</span>
+            <Icon name="smart_toy" size={22} color={C.primary} />
+            <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>AI Copilot Workspace</span>
             {tab === "chat" && (
-              <button onClick={() => setReadAloud(!readAloud)} style={{
-                display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 100,
-                fontSize: 11, fontWeight: 700, cursor: "pointer", border: `1px solid ${readAloud ? "#3b82f6" : "#cbd5e1"}`, 
-                background: readAloud ? "#eff6ff" : "transparent", color: readAloud ? "#3b82f6" : "#64748b",
-                marginLeft: 12, transition: "all 0.2s"
-              }}>
-                <Icon name={readAloud ? "volume_up" : "volume_off"} size={14} color={readAloud ? "#3b82f6" : "#64748b"} />
-                Read Aloud
-              </button>
+              <>
+                <button onClick={() => setReadAloud(!readAloud)} style={{
+                  display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 100,
+                  fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  border: `1px solid ${readAloud ? C.primary : C.border}`,
+                  background: readAloud ? "rgba(77,142,255,0.15)" : "transparent",
+                  color: readAloud ? C.primary : C.muted,
+                  marginLeft: 12, transition: "all 0.2s", fontFamily: "inherit",
+                }}>
+                  <Icon name={readAloud ? "volume_up" : "volume_off"} size={14} color={readAloud ? C.primary : C.muted} />
+                  Read Aloud
+                </button>
+                <select
+                  value={voiceLang}
+                  onChange={e => setVoiceLang(e.target.value as "en-IN" | "hi-IN")}
+                  style={{
+                    background: "rgba(255,255,255,0.06)", border: `1px solid ${C.border}`,
+                    borderRadius: 8, padding: "4px 8px", fontSize: 11, color: C.muted,
+                    cursor: "pointer", fontFamily: "inherit", outline: "none",
+                  }}
+                >
+                  <option value="en-IN">🎙 English</option>
+                  <option value="hi-IN">🎙 Hindi</option>
+                </select>
+              </>
             )}
           </div>
-          <div style={{ display: "flex", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 10, padding: 3, gap: 2 }}>
+          <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 10, padding: 3, gap: 2 }}>
             {(["chat", "graph"] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} style={{
                 display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderRadius: 8,
                 fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none", fontFamily: "inherit",
-                background: tab === t ? "#fff" : "transparent",
-                color: tab === t ? "#0f172a" : "#64748b",
-                boxShadow: tab === t ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                background: tab === t ? "rgba(77,142,255,0.2)" : "transparent",
+                color: tab === t ? C.text : C.muted,
+                boxShadow: tab === t ? `0 0 0 1px rgba(77,142,255,0.3)` : "none",
                 transition: "all 0.15s",
               }}>
-                <Icon name={t === "chat" ? "chat" : "hub"} size={15} color={tab === t ? "#0f172a" : "#64748b"} />
+                <Icon name={t === "chat" ? "chat" : "hub"} size={15} color={tab === t ? C.primary : C.muted} />
                 {t === "chat" ? "Copilot Chat" : "Knowledge Graph"}
               </button>
             ))}
@@ -360,7 +381,7 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
             </div>
 
             {/* Messages Feed */}
-            <div ref={feedRef} style={{ flex: 1, overflowY: "auto", padding: "20px", background: "#f8fafc" }}>
+            <div ref={feedRef} style={{ flex: 1, overflowY: "auto", padding: "20px", background: "transparent" }}>
               <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
                 {messages.map(msg => (
                   <div key={msg.id} style={{ display: "flex", flexDirection: "column", alignItems: msg.role === "user" ? "flex-end" : "flex-start" }}>
@@ -371,9 +392,9 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
                         key={index}
                         style={{
                           display: "flex", alignItems: "center", gap: 8,
-                          background: "#f1f5f9", border: "1px solid #cbd5e1",
+                          background: "rgba(77,142,255,0.08)", border: `1px solid rgba(77,142,255,0.2)`,
                           borderRadius: 8, padding: "6px 12px", fontSize: 12,
-                          color: "#475569", marginBottom: 8, alignSelf: "flex-start",
+                          color: C.muted, marginBottom: 8, alignSelf: "flex-start",
                           animation: t.status === "running" ? "pulse 1.5s infinite" : "none"
                         }}
                       >
@@ -395,15 +416,15 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
 
                     {/* Main Message Box */}
                     {msg.role === "error" ? (
-                      <div style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 12, padding: "12px 16px", fontSize: 14, maxWidth: "80%", lineHeight: 1.6 }}>
+                      <div style={{ background: "rgba(255,180,171,0.1)", color: C.error, border: `1px solid rgba(255,180,171,0.3)`, borderRadius: 12, padding: "12px 16px", fontSize: 14, maxWidth: "80%", lineHeight: 1.6 }}>
                         {msg.content}
                       </div>
                     ) : (
                       <div style={{
                         maxWidth: "80%", padding: "12px 16px", borderRadius: 16, fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap", wordBreak: "break-word",
                         ...(msg.role === "user"
-                          ? { background: "#3b82f6", color: "#fff", borderBottomRightRadius: 4 }
-                          : { background: "#fff", color: "#1e293b", border: "1px solid #e2e8f0", borderBottomLeftRadius: 4 }
+                          ? { background: `linear-gradient(135deg, ${C.primary}, #2563eb)`, color: "#fff", borderBottomRightRadius: 4 }
+                          : { background: "rgba(255,255,255,0.07)", color: C.text, border: `1px solid ${C.border}`, borderBottomLeftRadius: 4 }
                         )
                       }}>
                         {msg.content}
@@ -424,39 +445,52 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
             </div>
 
             {/* Input Form */}
-            <div style={{ background: "#fff", borderTop: "1px solid #e2e8f0", padding: 16, flexShrink: 0 }}>
+            <div style={{ background: "rgba(10,15,28,0.7)", backdropFilter: "blur(16px)", borderTop: `1px solid rgba(255,255,255,0.07)`, padding: 16, flexShrink: 0 }}>
               <form id="copilot-form" onSubmit={handleSend} style={{ display: "flex", gap: 10, alignItems: "flex-end", maxWidth: 720, margin: "0 auto" }}>
                 <textarea
                   value={input} rows={1}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); (e.currentTarget.form as HTMLFormElement).requestSubmit(); } }}
-                  placeholder="Ask about specs, regulatory gaps, safety procedures..."
+                  placeholder="Ask about specs, regulatory gaps, safety procedures…"
                   style={{
                     flex: 1, minHeight: 46, maxHeight: 120, resize: "none",
-                    background: "#f8fafc", border: "2px solid #e2e8f0", borderRadius: 12,
-                    padding: "12px 16px", fontSize: 14, color: "#1e293b", outline: "none",
+                    background: "rgba(255,255,255,0.06)", border: `1px solid ${C.border}`, borderRadius: 12,
+                    padding: "12px 16px", fontSize: 14, color: C.text, outline: "none",
                     fontFamily: "inherit", transition: "border-color 0.15s",
                   }}
+                  onFocus={e => e.currentTarget.style.borderColor = C.primary}
+                  onBlur={e => e.currentTarget.style.borderColor = C.border}
                 />
-                <button type="button" onClick={toggleListening} style={{
-                  width: 46, height: 46, background: isListening ? "#ef4444" : "#f1f5f9", color: isListening ? "#fff" : "#64748b",
-                  border: "none", borderRadius: 12, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0,
-                  transition: "all 0.2s", animation: isListening ? "pulse 1.5s infinite" : "none"
-                }}>
-                  <Icon name="mic" size={20} color={isListening ? "#fff" : "#64748b"} />
+                {/* Mic button */}
+                <button type="button" onClick={launchVoice} title="Voice Input" style={{
+                  width: 46, height: 46,
+                  background: `linear-gradient(135deg, rgba(77,142,255,0.2), rgba(37,99,235,0.1))`,
+                  border: `1px solid rgba(77,142,255,0.3)`,
+                  borderRadius: 12, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0,
+                  transition: "all 0.2s",
+                }}
+                  onMouseOver={e => e.currentTarget.style.background = `linear-gradient(135deg, rgba(77,142,255,0.35), rgba(37,99,235,0.25))`}
+                  onMouseOut={e => e.currentTarget.style.background = `linear-gradient(135deg, rgba(77,142,255,0.2), rgba(37,99,235,0.1))`}
+                >
+                  <Icon name="mic" size={20} color={C.primary} />
                 </button>
+                {/* Send button */}
                 <button type="submit" disabled={!input.trim() || isTyping} style={{
-                  width: 46, height: 46, background: "#3b82f6", color: "#fff",
-                  border: `2px solid ${C.black}`, boxShadow: `3px 3px 0 ${C.black}`,
-                  borderRadius: 12, cursor: input.trim() && !isTyping ? "pointer" : "not-allowed",
+                  width: 46, height: 46,
+                  background: input.trim() && !isTyping ? `linear-gradient(135deg, ${C.primary}, #2563eb)` : "rgba(255,255,255,0.06)",
+                  border: `1px solid ${input.trim() && !isTyping ? "transparent" : C.border}`,
+                  borderRadius: 12,
+                  cursor: input.trim() && !isTyping ? "pointer" : "not-allowed",
                   display: "grid", placeItems: "center", flexShrink: 0,
-                  opacity: !input.trim() || isTyping ? 0.4 : 1, transition: "all 0.1s",
+                  opacity: !input.trim() || isTyping ? 0.4 : 1, transition: "all 0.2s",
+                  boxShadow: input.trim() && !isTyping ? `0 4px 14px rgba(77,142,255,0.35)` : "none",
                 }}>
                   <Icon name={isTyping ? "hourglass_empty" : "send"} size={18} color="#fff" />
                 </button>
               </form>
-              <div style={{ textAlign: "center", fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
-                AI Model: Llama 3.2 (Local CPU Inference / Ollama Backend)
+              <div style={{ textAlign: "center", fontSize: 11, color: C.muted, marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <Icon name="smart_toy" size={12} color={C.muted} />
+                AI Model: Llama 3.2 &nbsp;·&nbsp; Click <Icon name="mic" size={11} color={C.muted} /> or press mic for voice input
               </div>
             </div>
           </>
