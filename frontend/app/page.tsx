@@ -207,7 +207,7 @@ export default function Page() {
   return (
     <div style={{ position: "relative", minHeight: "100vh", background: C.bg }}>
       <Sidebar active={activePath} onNav={setActivePath} onLogout={logout} user={user} />
-      <TopBar user={user} />
+      <TopBar user={user} onLogout={logout} onNavigate={setActivePath} />
 
       <main style={{ marginLeft: 256, paddingTop: 64, minHeight: "100vh" }}>
         {activePath === "dashboard" && (

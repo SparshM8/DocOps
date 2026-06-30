@@ -34,12 +34,29 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
   const [input, setInput] = useState("");
   const [tab, setTab] = useState<"chat" | "graph">("chat");
 
+  const [isListening, setIsListening] = useState(false);
+  const [readAloud, setReadAloud] = useState(false);
+  const readAloudRef = useRef(false);
+  useEffect(() => { readAloudRef.current = readAloud; }, [readAloud]);
+
   const feedRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    const pendingQuery = sessionStorage.getItem("pending_copilot_query");
+    if (pendingQuery && token) {
+      sessionStorage.removeItem("pending_copilot_query");
+      setInput(pendingQuery);
+      setTimeout(() => {
+        const form = document.getElementById("copilot-form") as HTMLFormElement;
+        if (form) form.requestSubmit();
+      }, 500);
+    }
+  }, [token]);
 
   const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:3001";
 
@@ -101,6 +118,7 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
       const dec = new TextDecoder();
       let done = false;
       let buffer = "";
+      let finalAssistantText = "";
 
       while (!done) {
         const { value, done: isDone } = await reader.read();
@@ -116,6 +134,7 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
                 const data = JSON.parse(line.slice(6));
                 
                 if (data.type === "chunk") {
+                  finalAssistantText += data.content;
                   setMessages(p => p.map(m => m.id === assistantMsgId ? { ...m, content: m.content + data.content } : m));
                 } 
                 else if (data.type === "tool_start") {
@@ -143,6 +162,11 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
           }
         }
       }
+
+      if (readAloudRef.current && finalAssistantText) {
+        const utterance = new SpeechSynthesisUtterance(finalAssistantText.replace(/[*#]/g, ""));
+        window.speechSynthesis.speak(utterance);
+      }
     } catch (err: any) {
       setMessages(p => p.map(m => m.id === assistantMsgId ? { ...m, role: "error", content: `⚠️ Query failed: ${err.message}` } : m));
     } finally {
@@ -153,6 +177,25 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
   const fmtBytes = (b: number) => b < 1e6 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1e6).toFixed(1)} MB`;
 
   const isManager = user?.role === "plant_manager";
+
+  const toggleListening = () => {
+    if (isListening) return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice input is not supported in your browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    
+    recognition.onstart = () => setIsListening(true);
+    recognition.onresult = (e: any) => setInput(p => p ? p + " " + e.results[0][0].transcript : e.results[0][0].transcript);
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    
+    recognition.start();
+  };
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 64px)", overflow: "hidden" }}>
@@ -263,6 +306,17 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Icon name="smart_toy" size={22} color="#3b82f6" />
             <span style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>AI Copilot Workspace</span>
+            {tab === "chat" && (
+              <button onClick={() => setReadAloud(!readAloud)} style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 100,
+                fontSize: 11, fontWeight: 700, cursor: "pointer", border: `1px solid ${readAloud ? "#3b82f6" : "#cbd5e1"}`, 
+                background: readAloud ? "#eff6ff" : "transparent", color: readAloud ? "#3b82f6" : "#64748b",
+                marginLeft: 12, transition: "all 0.2s"
+              }}>
+                <Icon name={readAloud ? "volume_up" : "volume_off"} size={14} color={readAloud ? "#3b82f6" : "#64748b"} />
+                Read Aloud
+              </button>
+            )}
           </div>
           <div style={{ display: "flex", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 10, padding: 3, gap: 2 }}>
             {(["chat", "graph"] as const).map(t => (
@@ -371,7 +425,7 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
 
             {/* Input Form */}
             <div style={{ background: "#fff", borderTop: "1px solid #e2e8f0", padding: 16, flexShrink: 0 }}>
-              <form onSubmit={handleSend} style={{ display: "flex", gap: 10, alignItems: "flex-end", maxWidth: 720, margin: "0 auto" }}>
+              <form id="copilot-form" onSubmit={handleSend} style={{ display: "flex", gap: 10, alignItems: "flex-end", maxWidth: 720, margin: "0 auto" }}>
                 <textarea
                   value={input} rows={1}
                   onChange={e => setInput(e.target.value)}
@@ -384,6 +438,13 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
                     fontFamily: "inherit", transition: "border-color 0.15s",
                   }}
                 />
+                <button type="button" onClick={toggleListening} style={{
+                  width: 46, height: 46, background: isListening ? "#ef4444" : "#f1f5f9", color: isListening ? "#fff" : "#64748b",
+                  border: "none", borderRadius: 12, cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0,
+                  transition: "all 0.2s", animation: isListening ? "pulse 1.5s infinite" : "none"
+                }}>
+                  <Icon name="mic" size={20} color={isListening ? "#fff" : "#64748b"} />
+                </button>
                 <button type="submit" disabled={!input.trim() || isTyping} style={{
                   width: 46, height: 46, background: "#3b82f6", color: "#fff",
                   border: `2px solid ${C.black}`, boxShadow: `3px 3px 0 ${C.black}`,
@@ -401,7 +462,17 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
           </>
         ) : (
           <div style={{ flex: 1, background: "#020817", position: "relative", overflow: "hidden" }}>
-            <KnowledgeGraph token={token} />
+            <KnowledgeGraph 
+              token={token} 
+              onRunQuery={(q) => {
+                setTab("chat");
+                setInput(q);
+                setTimeout(() => {
+                  const form = document.getElementById("copilot-form") as HTMLFormElement;
+                  if (form) form.requestSubmit();
+                }, 500);
+              }} 
+            />
           </div>
         )}
       </div>

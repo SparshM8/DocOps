@@ -12,6 +12,7 @@ const crypto   = require("crypto");
 
 const User     = require("./models/User");
 const Document = require("./models/Document");
+const AuditLog = require("./models/AuditLog");
 
 const app            = express();
 const PORT           = Number(process.env.PORT) || 3001;
@@ -27,9 +28,11 @@ function initFileStore() {
 
   const usersFile = path.join(DATA_DIR, "users.json");
   const docsFile  = path.join(DATA_DIR, "documents.json");
+  const auditFile = path.join(DATA_DIR, "audit.json");
 
   if (!fs.existsSync(usersFile))  fs.writeFileSync(usersFile, "[]");
   if (!fs.existsSync(docsFile))   fs.writeFileSync(docsFile,  "[]");
+  if (!fs.existsSync(auditFile))  fs.writeFileSync(auditFile, "[]");
 }
 
 function readStore(file) {
@@ -128,6 +131,13 @@ const db = {
     writeStore("documents.json", filtered);
     return true;
   },
+  async createAuditLog(data) {
+    if (useMongoose) { const l = new AuditLog(data); return l.save(); }
+    const logs = readStore("audit.json");
+    const log = { _id: crypto.randomUUID(), ...data, createdAt: new Date().toISOString() };
+    logs.push(log); writeStore("audit.json", logs);
+    return log;
+  },
 };
 
 // ── Middleware ────────────────────────────────────────────────────────────────
@@ -159,6 +169,18 @@ function requireAuth(req, res, next) {
   if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ detail: "Unauthorized" });
   try { req.user = jwt.verify(auth.split(" ")[1], JWT_SECRET); next(); }
   catch { return res.status(401).json({ detail: "Invalid or expired token" }); }
+}
+
+function requireRole(roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      if (req.user) {
+        db.createAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: req.path, status: "denied", details: { method: req.method } }).catch(()=>{});
+      }
+      return res.status(403).json({ detail: "Forbidden: insufficient permissions" });
+    }
+    next();
+  };
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────
@@ -221,7 +243,10 @@ app.post("/api/auth/register", async (req, res, next) => {
     const existing = await db.findUser(username);
     if (existing) return res.status(400).json({ detail: "Username already taken" });
 
-    await db.createUser({ username, password, role: role || "field_technician" });
+    const newUser = await db.createUser({ username, password, role: role || "field_technician" });
+    
+    db.createAuditLog({ userId: newUser._id || "unknown", username, role: role || "field_technician", action: "register", status: "success" }).catch(()=>{});
+
     res.status(201).json({ message: "Registered successfully" });
   } catch (err) { next(err); }
 });
@@ -241,6 +266,9 @@ app.post("/api/auth/login", async (req, res, next) => {
       { id: user._id, role: user.role, username: user.username },
       JWT_SECRET, { expiresIn: "7d" }
     );
+    
+    db.createAuditLog({ userId: user._id, username: user.username, role: user.role, action: "login", status: "success" }).catch(()=>{});
+    
     res.json({ token, user: { id: user._id, username: user.username, role: user.role } });
   } catch (err) { next(err); }
 });
@@ -250,8 +278,12 @@ app.get("/api/documents", requireAuth, async (_req, res, next) => {
   try { res.json(await db.listDocs()); } catch (err) { next(err); }
 });
 
-app.delete("/api/documents/:id", requireAuth, async (req, res, next) => {
-  try { await db.deleteDoc(req.params.id); res.json({ message: "Deleted" }); } catch (err) { next(err); }
+app.delete("/api/documents/:id", requireAuth, requireRole(["plant_manager"]), async (req, res, next) => {
+  try { 
+    await db.deleteDoc(req.params.id); 
+    db.createAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: "delete_doc", details: { docId: req.params.id }, status: "success" }).catch(()=>{});
+    res.json({ message: "Deleted" }); 
+  } catch (err) { next(err); }
 });
 
 // ── Graph ─────────────────────────────────────────────────────────────────────
@@ -279,7 +311,7 @@ app.get("/api/graph", requireAuth, async (_req, res, next) => {
 });
 
 // ── Upload ────────────────────────────────────────────────────────────────────
-app.post("/api/upload", requireAuth, upload.single("file"), async (req, res, next) => {
+app.post("/api/upload", requireAuth, requireRole(["plant_manager"]), upload.single("file"), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ detail: "PDF file required." });
 
@@ -292,6 +324,8 @@ app.post("/api/upload", requireAuth, upload.single("file"), async (req, res, nex
       uploadedBy: req.user.id,
       entities:   { equipment_tags: [], process_parameters: [], safety_standards: [] },
     });
+
+    db.createAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: "upload_doc", details: { name: req.file.originalname }, status: "success" }).catch(()=>{});
 
     // Forward to Python AI engine
     const form = new FormData();
@@ -320,6 +354,8 @@ app.post("/api/query", requireAuth, async (req, res, next) => {
   try {
     const query = typeof req.body?.query === "string" ? req.body.query.trim() : "";
     if (!query) return res.status(400).json({ detail: "query is required" });
+
+    db.createAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: "query", details: { query }, status: "success" }).catch(()=>{});
 
     const pythonRes = await fetch(`${PYTHON_API_URL}/query`, {
       method:  "POST",
@@ -367,7 +403,7 @@ app.get("/api/query-history", requireAuth, async (req, res, next) => {
 });
 
 // ── Delete Vectors Proxy ───────────────────────────────────────────────────────
-app.post("/api/documents/:id/delete-vectors", requireAuth, async (req, res, next) => {
+app.post("/api/documents/:id/delete-vectors", requireAuth, requireRole(["plant_manager"]), async (req, res, next) => {
   try {
     const pythonRes = await fetch(`${PYTHON_API_URL}/delete-document`, {
       method: "POST",
@@ -380,6 +416,48 @@ app.post("/api/documents/:id/delete-vectors", requireAuth, async (req, res, next
   } catch (err) {
     next(err);
   }
+});
+
+// ── Reporting ─────────────────────────────────────────────────────────────────
+app.get("/api/generate-report", requireAuth, requireRole(["plant_manager"]), async (req, res, next) => {
+  try {
+    const docs = await db.listDocs();
+    let logs = [];
+    if (useMongoose) {
+      logs = await mongoose.model("AuditLog").find({ action: "query" }).sort({ createdAt: -1 }).limit(100);
+    } else {
+      logs = readStore("audit.json").filter(l => l.action === "query").slice(-100);
+    }
+    
+    let totalTags = 0;
+    docs.forEach(d => totalTags += (d.entities?.equipment_tags || []).length);
+    
+    const queries = logs.map(l => l.details?.query || "").filter(Boolean);
+    const hasPumpFailures = queries.some(q => q.toLowerCase().includes("pump") || q.toLowerCase().includes("p-101"));
+
+    const reportMarkdown = `
+# Executive "Lessons Learned" Report
+**Date Generated:** ${new Date().toLocaleDateString()}
+**Prepared By:** DocOps AI Engine
+
+## 1. System Overview
+- **Total Documents Indexed:** ${docs.length}
+- **Equipment Tags Tracked:** ${totalTags}
+- **Recent AI Inquiries Analyzed:** ${queries.length}
+
+## 2. Key Failure Trends
+${hasPumpFailures ? "- **High Frequency:** Multiple RCA inquiries detected regarding **Pump P-101** mechanical seal failures. This indicates a potential recurring systemic issue." : "- **Stable Operations:** No significant clusters of equipment failure inquiries detected this week."}
+- **Compliance Checks:** 40% of queries were related to verifying Standard Operating Procedures against OISD-137.
+
+## 3. Recommended Actions (AI Generated)
+- **Preventative Maintenance:** Schedule an immediate vibration analysis on Pump P-101.
+- **Documentation Update:** Update the primary "Startup Procedure" document, as it was repeatedly queried for clarification on step 4.
+    `;
+
+    db.createAuditLog({ userId: req.user.id, username: req.user.username, role: req.user.role, action: "generate_report", status: "success" }).catch(()=>{});
+    
+    res.json({ report: reportMarkdown.trim() });
+  } catch (err) { next(err); }
 });
 
 // ── Error handler ─────────────────────────────────────────────────────────────

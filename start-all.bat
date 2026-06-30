@@ -20,7 +20,7 @@ findstr /C:"sk-your-key-here" "%~dp0backend\.env" >nul 2>&1
 if not errorlevel 1 (
     echo  [INFO] No OPENAI_API_KEY detected in backend/.env.
     echo  DocOps will start in local OFFLINE / Ollama mode.
-    echo  (Set a key later in backend/.env to upgrade to cloud GPT models).
+    echo  ^(Set a key later in backend/.env to upgrade to cloud GPT models^).
     echo.
 )
 

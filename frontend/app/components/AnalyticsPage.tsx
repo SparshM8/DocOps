@@ -11,6 +11,9 @@ interface AnalyticsProps {
 export default function AnalyticsPage({ token, docs }: AnalyticsProps) {
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [report, setReport] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:3001";
 
@@ -51,6 +54,26 @@ export default function AnalyticsPage({ token, docs }: AnalyticsProps) {
   const eqPct = grandTotal > 0 ? Math.round((totalEquipment / grandTotal) * 100) : 0;
   const paramPct = grandTotal > 0 ? Math.round((totalParameters / grandTotal) * 100) : 0;
   const stdPct = grandTotal > 0 ? Math.round((totalStandards / grandTotal) * 100) : 0;
+
+  const generateReport = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch(`${GATEWAY}/api/generate-report`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReport(data.report);
+        setShowModal(true);
+      } else {
+        alert("Failed to generate report (ensure you are logged in as plant_manager).");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   return (
     <div style={{ padding: 28, overflowY: "auto", minHeight: "100%" }}>
@@ -121,18 +144,29 @@ export default function AnalyticsPage({ token, docs }: AnalyticsProps) {
           </div>
 
           {/* Quick Metrics Card */}
-          <div style={{ ...S.card, padding: 24, background: `linear-gradient(135deg, ${C.surf} 0%, rgba(87,27,193,0.06) 100%)` }}>
-            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Graph Summary</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              <div style={{ background: C.surf2, padding: 14, borderRadius: 10, border: `1px solid ${C.border}` }}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: C.primary }}>{docs.length}</div>
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Documents</div>
-              </div>
-              <div style={{ background: C.surf2, padding: 14, borderRadius: 10, border: `1px solid ${C.border}` }}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: C.accent }}>{grandTotal}</div>
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Linked Entities</div>
-              </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ background: C.surf2, padding: 14, borderRadius: 10, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: C.primary }}>{docs.length}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Documents Indexed</div>
             </div>
+            <div style={{ background: C.surf2, padding: 14, borderRadius: 10, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: C.accent }}>{grandTotal}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Linked Entities</div>
+            </div>
+          </div>
+
+          {/* AI Knowledge Extraction Card */}
+          <div style={{ ...S.card, padding: 24, background: `linear-gradient(135deg, ${C.surf} 0%, rgba(87,27,193,0.06) 100%)` }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>AI Knowledge Extraction</h3>
+            <p style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
+              DocOps continuously analyzes system usage to identify operational blind spots and failure trends.
+            </p>
+            <button onClick={generateReport} disabled={generating} style={{
+              ...S.btnPrimary, width: "100%", justifyContent: "center", opacity: generating ? 0.6 : 1
+            }}>
+              <Icon name="auto_awesome" size={18} color="#001a42" />
+              {generating ? "Synthesizing Data..." : "Generate Weekly Lessons Learned"}
+            </button>
           </div>
         </div>
 
@@ -186,6 +220,38 @@ export default function AnalyticsPage({ token, docs }: AnalyticsProps) {
         </div>
 
       </div>
+
+      {showModal && report && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
+        }}>
+          <div style={{
+            background: C.surf, width: 600, maxHeight: "80vh", borderRadius: 16,
+            padding: 32, overflowY: "auto", border: `2px solid ${C.border}`
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+              <div style={{ fontSize: 20, fontWeight: 800, display: "flex", gap: 10, alignItems: "center", color: C.text }}>
+                <Icon name="assignment" size={24} color={C.primary} />
+                DocOps Auto-Generated Report
+              </div>
+              <button onClick={() => setShowModal(false)} style={{ background: "none", border: "none", color: C.text, cursor: "pointer" }}>
+                <Icon name="close" size={24} color={C.text} />
+              </button>
+            </div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, color: C.text, whiteSpace: "pre-wrap", background: C.surf2, padding: 20, borderRadius: 10, border: `1px solid ${C.border}` }}>
+              {report}
+            </div>
+            <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+              <button onClick={() => setShowModal(false)} style={{ ...S.btnPrimary, padding: "10px 20px" }}>
+                <Icon name="download" size={18} color="#001a42" />
+                Export as PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

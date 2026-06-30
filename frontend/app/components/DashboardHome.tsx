@@ -8,7 +8,10 @@ interface DashboardProps {
   token: string;
 }
 
+import ARScannerModal from "./ARScannerModal";
+
 export default function DashboardHome({ onNavigate, token }: DashboardProps) {
+  const [showScanner, setShowScanner] = useState(false);
   const [stats, setStats] = useState({
     vector_count: 0,
     document_count: 0,
@@ -29,14 +32,11 @@ export default function DashboardHome({ onNavigate, token }: DashboardProps) {
   useEffect(() => {
     async function fetchDashboardData() {
       try {
-        // Fetch health
         const hRes = await fetch(`${GATEWAY}/api/health`);
         if (hRes.ok) {
           const hData = await hRes.json();
           setHealth(hData);
         }
-
-        // Fetch stats
         const sRes = await fetch(`${GATEWAY}/api/stats`, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -50,14 +50,23 @@ export default function DashboardHome({ onNavigate, token }: DashboardProps) {
         setLoading(false);
       }
     }
-
-    if (token) {
-      fetchDashboardData();
-    }
+    if (token) fetchDashboardData();
   }, [token, GATEWAY]);
+
+  const handleScanComplete = (tag: string) => {
+    setShowScanner(false);
+    sessionStorage.setItem("pending_copilot_query", `Pull equipment history and RCA recommendations for ${tag}`);
+    onNavigate("copilot");
+  };
 
   return (
     <div style={{ padding: 28, overflowY: "auto", minHeight: "100%" }}>
+      {showScanner && (
+        <ARScannerModal 
+          onClose={() => setShowScanner(false)} 
+          onScanComplete={handleScanComplete} 
+        />
+      )}
       {/* Hero */}
       <div style={{
         ...S.card,
@@ -170,6 +179,13 @@ export default function DashboardHome({ onNavigate, token }: DashboardProps) {
           <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 20 }}>Quick Actions</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, flex: 1 }}>
             <button
+              onClick={() => setShowScanner(true)}
+              style={{ ...S.btnGhost, justifyContent: "flex-start", width: "100%", padding: "14px 20px", background: "rgba(78, 222, 163, 0.1)", borderColor: "rgba(78, 222, 163, 0.3)" }}
+            >
+              <Icon name="qr_code_scanner" size={18} color={C.accent} />
+              <span style={{ color: C.accent }}>Launch AR Equipment Scanner</span>
+            </button>
+            <button
               onClick={() => onNavigate("documents")}
               style={{ ...S.btnGhost, justifyContent: "flex-start", width: "100%", padding: "14px 20px" }}
             >
@@ -183,16 +199,8 @@ export default function DashboardHome({ onNavigate, token }: DashboardProps) {
               <Icon name="rule" size={18} color={C.second} />
               Compliance Gap Analysis
             </button>
-            <button
-              onClick={() => onNavigate("analytics")}
-              style={{ ...S.btnGhost, justifyContent: "flex-start", width: "100%", padding: "14px 20px" }}
-            >
-              <Icon name="history" size={18} color={C.accent} />
-              Review Query Logs
-            </button>
           </div>
         </div>
-
       </div>
     </div>
   );
