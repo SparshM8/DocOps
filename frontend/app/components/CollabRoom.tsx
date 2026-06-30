@@ -252,224 +252,301 @@ export default function CollabRoom({ user, onQuerySync }: CollabRoomProps) {
   const genRoomCode = () => setRoomInput(Math.random().toString(36).substring(2, 6).toUpperCase());
 
   // ── Render ────────────────────────────────────────────────────────────────
-  const panelStyle: React.CSSProperties = {
-    position: "fixed", bottom: 80, right: 24, zIndex: 5000,
-    width: open ? (phase === "live" ? 480 : 340) : 56,
-    height: open ? (phase === "live" ? 560 : "auto") : 56,
-    borderRadius: open ? 20 : "50%",
-    background: "rgba(5,11,20,0.92)",
-    backdropFilter: "blur(24px)",
-    WebkitBackdropFilter: "blur(24px)",
-    border: `1px solid ${phase === "live" ? "rgba(77,142,255,0.4)" : "rgba(255,255,255,0.1)"}`,
-    boxShadow: phase === "live"
-      ? "0 0 0 3px rgba(77,142,255,0.2), 0 20px 60px rgba(0,0,0,0.6)"
-      : "0 8px 32px rgba(0,0,0,0.5)",
-    overflow: "hidden",
-    transition: "all 0.35s cubic-bezier(0.34,1.56,0.64,1)",
-    display: "flex", flexDirection: "column",
-  };
-
   return (
-    <>
+    <div style={{
+      padding: "32px 40px",
+      maxWidth: 1200,
+      margin: "0 auto",
+      display: "flex",
+      flexDirection: "column",
+      gap: 24,
+      animation: "fadeIn 0.25s ease-out",
+    }}>
+      {/* Header Area */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h2 style={{ fontSize: 28, fontWeight: 800, color: C.text, display: "flex", alignItems: "center", gap: 12, margin: 0 }}>
+            <Icon name="groups" size={32} color={C.primary} />
+            Collab Room
+          </h2>
+          <p style={{ color: C.muted, fontSize: 14, margin: "6px 0 0 0" }}>
+            Real-time peer-to-peer video calls and query syncing using WebRTC.
+          </p>
+        </div>
+        {phase === "live" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{
+              background: "rgba(78,222,163,0.15)", border: "1px solid rgba(78,222,163,0.3)",
+              borderRadius: 100, padding: "4px 12px", fontSize: 11, fontWeight: 700,
+              color: C.accent, textTransform: "uppercase", letterSpacing: 1,
+            }}>Active Room: {myRoom}</span>
+            <button onClick={() => { cleanup(); setPhase("lobby"); }} style={{
+              background: "rgba(255,100,80,0.15)", border: `1px solid rgba(255,100,80,0.2)`,
+              borderRadius: 10, padding: "8px 16px", color: C.error, fontSize: 13,
+              fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+              transition: "all 0.2s"
+            }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,100,80,0.25)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,100,80,0.15)"}
+            >
+              <Icon name="call_end" size={16} /> Disconnect
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Sync notification toast */}
       {syncMsg && (
         <div style={{
-          position: "fixed", bottom: 150, right: 24, zIndex: 6000,
+          position: "fixed", top: 80, right: 40, zIndex: 6000,
           background: "rgba(77,142,255,0.15)", border: `1px solid rgba(77,142,255,0.4)`,
-          borderRadius: 12, padding: "10px 16px", fontSize: 13, color: C.primary,
+          borderRadius: 12, padding: "12px 18px", fontSize: 13, color: C.primary,
           backdropFilter: "blur(12px)", maxWidth: 320,
-          animation: "fadeIn 0.3s ease",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+          animation: "slideIn 0.3s cubic-bezier(0.34,1.56,0.64,1)",
         }}>
           <Icon name="sync" size={14} color={C.primary} /> &nbsp;{syncMsg}
         </div>
       )}
 
-      <div style={panelStyle}>
-        {/* Toggle Button (when collapsed) */}
-        {!open && (
-          <button onClick={() => { setOpen(true); if (phase === "idle") setPhase("lobby"); }}
-            style={{
-              width: 56, height: 56, background: "none", border: "none", cursor: "pointer",
-              display: "grid", placeItems: "center", position: "relative",
-            }}>
-            <Icon name="group" size={24} color={C.primary} />
-            {phase === "live" && (
-              <span style={{
-                position: "absolute", top: 8, right: 8, width: 10, height: 10,
-                background: C.accent, borderRadius: "50%", border: "2px solid #050b14",
-              }} />
-            )}
-          </button>
-        )}
+      {/* LOBBY / DISCONNECTED */}
+      {(phase === "idle" || phase === "lobby" || phase === "connecting") && (
+        <div style={{
+          background: "rgba(10,15,28,0.4)",
+          backdropFilter: "blur(16px)",
+          border: `1px solid ${C.border}`,
+          borderRadius: 20,
+          padding: 40,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          maxWidth: 600,
+          width: "100%",
+          margin: "40px auto 0",
+          textAlign: "center",
+          boxShadow: "0 20px 40px rgba(0,0,0,0.3)"
+        }}>
+          <div style={{
+            width: 80, height: 80, borderRadius: "50%",
+            background: "rgba(77,142,255,0.08)", border: `1px solid rgba(77,142,255,0.15)`,
+            display: "grid", placeItems: "center", marginBottom: 24
+          }}>
+            <Icon name="contact_sharing" size={38} color={C.primary} />
+          </div>
+          <h3 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: "0 0 12px 0" }}>Start collaborating</h3>
+          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6, margin: "0 0 32px 0", maxWidth: 440 }}>
+            Enter a room code below to connect with another engineer. Once joined, your video streams and AI Copilot prompts will sync in real time.
+          </p>
 
-        {open && (
-          <>
-            {/* Header */}
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "14px 16px", borderBottom: `1px solid rgba(255,255,255,0.07)`, flexShrink: 0,
+          <div style={{ display: "flex", gap: 12, width: "100%", maxWidth: 400, marginBottom: 16 }}>
+            <input
+              value={roomInput}
+              onChange={e => setRoomInput(e.target.value.toUpperCase())}
+              placeholder="ENTER ROOM CODE"
+              maxLength={8}
+              style={{
+                flex: 1, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`,
+                borderRadius: 12, padding: "14px 18px", fontSize: 16, fontWeight: 700,
+                color: C.text, outline: "none", letterSpacing: 4, textAlign: "center",
+                fontFamily: "monospace", transition: "all 0.2s"
+              }}
+              onFocus={e => e.currentTarget.style.borderColor = C.primary}
+              onBlur={e => e.currentTarget.style.borderColor = C.border}
+              onKeyDown={e => e.key === "Enter" && joinRoom()}
+            />
+            <button onClick={genRoomCode} title="Generate random code" style={{
+              background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`,
+              borderRadius: 12, padding: "0 18px", cursor: "pointer", color: C.muted,
+              display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s"
+            }}
+              onMouseEnter={(e) => e.currentTarget.style.borderColor = C.primary}
+              onMouseLeave={(e) => e.currentTarget.style.borderColor = C.border}
+            >
+              <Icon name="casino" size={20} color={C.muted} />
+            </button>
+          </div>
+
+          {error && <p style={{ color: C.error, fontSize: 13, fontWeight: 600, margin: "0 0 20px 0" }}>{error}</p>}
+
+          <button
+            onClick={joinRoom}
+            disabled={phase === "connecting"}
+            style={{
+              width: "100%", maxWidth: 400,
+              background: phase === "connecting" ? "rgba(77,142,255,0.1)" : `linear-gradient(135deg, ${C.primary}, #2563eb)`,
+              border: "none", borderRadius: 12, padding: "14px 20px", fontSize: 15, fontWeight: 700,
+              color: "#fff", cursor: phase === "connecting" ? "wait" : "pointer",
+              fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+              transition: "all 0.2s",
+              boxShadow: phase !== "connecting" ? "0 4px 14px rgba(77,142,255,0.35)" : "none",
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <Icon name="videocam" size={20} color={phase === "live" ? C.accent : C.primary} />
-                <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
-                  {phase === "live" ? `Room: ${myRoom}` : "Live Collaboration"}
-                </span>
-                {phase === "live" && (
-                  <span style={{
-                    background: "rgba(78,222,163,0.15)", border: "1px solid rgba(78,222,163,0.3)",
-                    borderRadius: 100, padding: "2px 10px", fontSize: 10, fontWeight: 700,
-                    color: C.accent, textTransform: "uppercase", letterSpacing: 1,
-                  }}>LIVE</span>
+            {phase === "connecting"
+              ? <><div style={{ width: 16, height: 16, border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} /> Connecting Session…</>
+              : <><Icon name="videocam" size={18} color="#fff" /> Start Session</>}
+          </button>
+        </div>
+      )}
+
+      {/* LIVE SESSION */}
+      {phase === "live" && (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 340px",
+          gap: 24,
+          alignItems: "stretch",
+        }}>
+          {/* Left Side: Video streams + Controls */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: peers.length > 0 ? "1fr 1fr" : "1fr",
+              gap: 16,
+              background: "rgba(10,15,28,0.3)",
+              border: `1px solid ${C.border}`,
+              borderRadius: 20,
+              padding: 16,
+              aspectRatio: "16/10",
+              alignContent: "center",
+            }}>
+              {/* My video */}
+              <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: "#060913", border: `1px solid rgba(255,255,255,0.06)`, height: "100%" }}>
+                <video ref={myVideoRef} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <div style={{
+                  position: "absolute", bottom: 12, left: 12, fontSize: 12, fontWeight: 700,
+                  color: "#fff", background: "rgba(5,11,20,0.8)", backdropFilter: "blur(8px)", borderRadius: 8, padding: "4px 12px",
+                }}>
+                  {user?.username} (You)
+                </div>
+                {!videoEnabled && (
+                  <div style={{ position: "absolute", inset: 0, background: "#0b0f19", display: "grid", placeItems: "center" }}>
+                    <Icon name="videocam_off" size={42} color={C.muted} />
+                  </div>
                 )}
               </div>
-              <button onClick={() => setOpen(false)} style={{
-                background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 4,
-              }}>
-                <Icon name="keyboard_arrow_down" size={20} color={C.muted} />
-              </button>
+              {/* Remote peer */}
+              {peers.map(peer => (
+                <RemoteVideo key={peer.peerId} peer={peer} />
+              ))}
+              {peers.length === 0 && (
+                <div style={{
+                  borderRadius: 14, background: "rgba(255,255,255,0.02)", border: `1px dashed ${C.border}`,
+                  display: "grid", placeItems: "center", height: "100%"
+                }}>
+                  <div style={{ textAlign: "center", color: C.muted }}>
+                    <div style={{
+                      width: 50, height: 50, borderRadius: "50%", background: "rgba(77,142,255,0.05)",
+                      display: "grid", placeItems: "center", margin: "0 auto 12px"
+                    }}>
+                      <Icon name="hourglass_top" size={22} color={C.primary} />
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Waiting for other peer to connect…</div>
+                    <div style={{ fontSize: 12, marginTop: 6, color: C.muted }}>Share Room Code: <strong style={{ color: C.primary, fontSize: 13 }}>{myRoom}</strong></div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* LOBBY */}
-            {(phase === "lobby" || phase === "connecting") && (
-              <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-                <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: 0 }}>
-                  Share a room code with a colleague. Both open the same code to start a live video + AI sync session.
-                </p>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    value={roomInput}
-                    onChange={e => setRoomInput(e.target.value.toUpperCase())}
-                    placeholder="ROOM CODE"
-                    maxLength={8}
-                    style={{
-                      flex: 1, background: "rgba(255,255,255,0.06)", border: `1px solid ${C.border}`,
-                      borderRadius: 10, padding: "10px 14px", fontSize: 15, fontWeight: 700,
-                      color: C.text, outline: "none", letterSpacing: 3, textAlign: "center",
-                      fontFamily: "monospace",
-                    }}
-                    onKeyDown={e => e.key === "Enter" && joinRoom()}
-                  />
-                  <button onClick={genRoomCode} title="Generate random code" style={{
-                    background: "rgba(255,255,255,0.06)", border: `1px solid ${C.border}`,
-                    borderRadius: 10, padding: "10px 12px", cursor: "pointer", color: C.muted,
-                  }}>
-                    <Icon name="casino" size={18} color={C.muted} />
-                  </button>
-                </div>
-                {error && <p style={{ color: C.error, fontSize: 12, margin: 0 }}>{error}</p>}
-                <button
-                  onClick={joinRoom}
-                  disabled={phase === "connecting"}
-                  style={{
-                    background: phase === "connecting" ? "rgba(77,142,255,0.1)" : `linear-gradient(135deg, ${C.primary}, #2563eb)`,
-                    border: "none", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700,
-                    color: "#fff", cursor: phase === "connecting" ? "wait" : "pointer",
-                    fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                    boxShadow: phase !== "connecting" ? "0 4px 14px rgba(77,142,255,0.35)" : "none",
-                  }}>
-                  {phase === "connecting"
-                    ? <><Icon name="hourglass_empty" size={16} color={C.primary} /> Connecting…</>
-                    : <><Icon name="videocam" size={16} color="#fff" /> Join Room</>}
-                </button>
-                <p style={{ fontSize: 11, color: C.muted, margin: 0, textAlign: "center" }}>
-                  Requires camera + microphone permission
-                </p>
-              </div>
-            )}
+            {/* Media Controls */}
+            <div style={{
+              display: "flex", justifySelf: "center", gap: 14, padding: "12px 24px",
+              background: "rgba(10,15,28,0.4)", border: `1px solid ${C.border}`, borderRadius: 16,
+              alignSelf: "center"
+            }}>
+              <ControlBtn icon={audioEnabled ? "mic" : "mic_off"} active={audioEnabled} onClick={toggleAudio} title={audioEnabled ? "Mute Microphone" : "Unmute Microphone"} />
+              <ControlBtn icon={videoEnabled ? "videocam" : "videocam_off"} active={videoEnabled} onClick={toggleVideo} title={videoEnabled ? "Stop Camera" : "Start Camera"} />
+            </div>
+          </div>
 
-            {/* LIVE SESSION */}
-            {phase === "live" && (
-              <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-                {/* Video Grid */}
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: peers.length > 0 ? "1fr 1fr" : "1fr",
-                  gap: 8, padding: 12, background: "rgba(0,0,0,0.3)", flexShrink: 0,
-                }}>
-                  {/* My video */}
-                  <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", background: "#000", aspectRatio: "4/3" }}>
-                    <video ref={myVideoRef} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          {/* Right Side: Chat & Activity Logs */}
+          <div style={{
+            background: "rgba(10,15,28,0.4)",
+            backdropFilter: "blur(16px)",
+            border: `1px solid ${C.border}`,
+            borderRadius: 20,
+            display: "flex", flexDirection: "column",
+            overflow: "hidden",
+            height: "100%",
+            minHeight: 400
+          }}>
+            {/* Panel Title */}
+            <div style={{
+              padding: "16px 20px", borderBottom: `1px solid rgba(255,255,255,0.07)`,
+              display: "flex", alignItems: "center", gap: 8
+            }}>
+              <Icon name="chat" size={18} color={C.primary} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.text, textTransform: "uppercase", letterSpacing: 1 }}>Room Chat</span>
+            </div>
+
+            {/* Chat List */}
+            <div style={{
+              flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12
+            }}>
+              {chatLog.length === 0 && (
+                <div style={{ textAlign: "center", padding: "32px 16px", color: C.muted }}>
+                  <Icon name="forum" size={24} color={C.muted} style={{ marginBottom: 8 }} />
+                  <p style={{ fontSize: 12, margin: 0, lineHeight: 1.5 }}>
+                    Chat history is peer-to-peer. Send a message to get started!
+                  </p>
+                </div>
+              )}
+              {chatLog.map((entry, i) => {
+                const isMe = entry.from === (user?.username || "Me");
+                return (
+                  <div key={i} style={{
+                    display: "flex", flexDirection: "column",
+                    alignItems: isMe ? "flex-end" : "flex-start"
+                  }}>
+                    <span style={{ fontSize: 10, color: C.muted, marginBottom: 3, fontWeight: 600 }}>{entry.from}</span>
                     <div style={{
-                      position: "absolute", bottom: 6, left: 8, fontSize: 11, fontWeight: 700,
-                      color: "#fff", background: "rgba(0,0,0,0.6)", borderRadius: 6, padding: "2px 8px",
+                      maxWidth: "85%", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.4,
+                      background: isMe ? `linear-gradient(135deg, ${C.primary}, #2563eb)` : "rgba(255,255,255,0.06)",
+                      color: "#fff",
+                      borderBottomRightRadius: isMe ? 2 : 12,
+                      borderBottomLeftRadius: isMe ? 12 : 2,
                     }}>
-                      {user?.username} (You)
+                      {entry.text}
                     </div>
-                    {!videoEnabled && (
-                      <div style={{ position: "absolute", inset: 0, background: "#111", display: "grid", placeItems: "center" }}>
-                        <Icon name="videocam_off" size={28} color={C.muted} />
-                      </div>
-                    )}
                   </div>
-                  {/* Remote peers */}
-                  {peers.map(peer => (
-                    <RemoteVideo key={peer.peerId} peer={peer} />
-                  ))}
-                  {peers.length === 0 && (
-                    <div style={{ borderRadius: 10, background: "rgba(255,255,255,0.04)", border: `1px dashed ${C.border}`, display: "grid", placeItems: "center", aspectRatio: "4/3" }}>
-                      <div style={{ textAlign: "center", color: C.muted }}>
-                        <Icon name="person_add" size={24} color={C.muted} />
-                        <div style={{ fontSize: 11, marginTop: 6 }}>Waiting for peer…</div>
-                        <div style={{ fontSize: 11, marginTop: 4, fontWeight: 700, color: C.primary, letterSpacing: 2 }}>{myRoom}</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                );
+              })}
+            </div>
 
-                {/* Chat Area */}
-                <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-                  {chatLog.length === 0 && (
-                    <p style={{ color: C.muted, fontSize: 12, textAlign: "center", marginTop: 12 }}>
-                      Chat with your team. AI queries sync automatically.
-                    </p>
-                  )}
-                  {chatLog.map((entry, i) => (
-                    <div key={i} style={{ fontSize: 12, lineHeight: 1.5 }}>
-                      <span style={{ fontWeight: 700, color: C.primary }}>{entry.from}: </span>
-                      <span style={{ color: C.text }}>{entry.text}</span>
-                    </div>
-                  ))}
-                </div>
+            {/* Chat Input */}
+            <div style={{ padding: 16, borderTop: `1px solid rgba(255,255,255,0.07)`, display: "flex", gap: 8 }}>
+              <input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && sendChat()}
+                placeholder="Type messages..."
+                style={{
+                  flex: 1, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`,
+                  borderRadius: 10, padding: "10px 14px", fontSize: 13, color: C.text,
+                  outline: "none", fontFamily: "inherit",
+                }}
+                onFocus={e => e.currentTarget.style.borderColor = C.primary}
+                onBlur={e => e.currentTarget.style.borderColor = C.border}
+              />
+              <button onClick={sendChat} style={{
+                background: `linear-gradient(135deg, ${C.primary}, #2563eb)`,
+                border: "none", borderRadius: 10, width: 38, height: 38,
+                display: "grid", placeItems: "center", cursor: "pointer",
+                boxShadow: `0 4px 10px rgba(77,142,255,0.25)`
+              }}>
+                <Icon name="send" size={14} color="#fff" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-                {/* Chat Input */}
-                <div style={{ padding: "8px 12px", borderTop: `1px solid rgba(255,255,255,0.07)`, display: "flex", gap: 8, flexShrink: 0 }}>
-                  <input
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && sendChat()}
-                    placeholder="Send message…"
-                    style={{
-                      flex: 1, background: "rgba(255,255,255,0.06)", border: `1px solid ${C.border}`,
-                      borderRadius: 8, padding: "8px 12px", fontSize: 12, color: C.text,
-                      outline: "none", fontFamily: "inherit",
-                    }}
-                  />
-                  <button onClick={sendChat} style={{ background: C.primary, border: "none", borderRadius: 8, padding: "8px 10px", cursor: "pointer" }}>
-                    <Icon name="send" size={14} color="#fff" />
-                  </button>
-                </div>
-
-                {/* Controls */}
-                <div style={{ display: "flex", justifyContent: "center", gap: 10, padding: "10px 12px", borderTop: `1px solid rgba(255,255,255,0.07)`, flexShrink: 0 }}>
-                  <ControlBtn icon={audioEnabled ? "mic" : "mic_off"} active={audioEnabled} onClick={toggleAudio} title={audioEnabled ? "Mute" : "Unmute"} />
-                  <ControlBtn icon={videoEnabled ? "videocam" : "videocam_off"} active={videoEnabled} onClick={toggleVideo} title={videoEnabled ? "Stop Video" : "Start Video"} />
-                  <button onClick={() => { cleanup(); setPhase("lobby"); }} title="Leave Room" style={{
-                    width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer",
-                    background: "rgba(255,100,80,0.15)", display: "grid", placeItems: "center",
-                    transition: "background 0.2s",
-                  }}
-                    onMouseOver={e => e.currentTarget.style.background = "rgba(255,100,80,0.3)"}
-                    onMouseOut={e => e.currentTarget.style.background = "rgba(255,100,80,0.15)"}
-                  >
-                    <Icon name="call_end" size={18} color={C.error} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </>
+      {/* Global styling overrides/animations */}
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateY(-20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
+    </div>
   );
 }
 

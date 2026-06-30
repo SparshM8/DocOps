@@ -244,12 +244,17 @@ export default function Page() {
           />
         )}
         {activePath === "team" && (
-          <div style={{ padding: 40 }}>
-            <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8, color: C.text }}>DocOps Team</h2>
-            <p style={{ color: C.muted, fontSize: 15 }}>
-              Currently logged in as a <strong>{user?.role?.replace("_", " ")}</strong>. Team management controls are under active design.
-            </p>
-          </div>
+          <CollabRoom
+            user={user}
+            onQuerySync={(q) => {
+              setActivePath("copilot");
+              setTimeout(() => {
+                sessionStorage.setItem("pending_copilot_query", q);
+                const form = document.getElementById("copilot-form") as HTMLFormElement;
+                if (form) form.requestSubmit();
+              }, 300);
+            }}
+          />
         )}
         {activePath === "profile" && (
           <ProfileSettings
@@ -267,38 +272,7 @@ export default function Page() {
           <SettingsPage user={user} />
         )}
       </main>
-
-      {/* Floating AI Action Button */}
-      <button
-        onClick={() => setActivePath("copilot")}
-        title="Open AI Copilot"
-        style={{
-          position: "fixed", bottom: 28, right: 100,
-          width: 60, height: 60, borderRadius: "50%",
-          background: `linear-gradient(135deg, ${C.primary}, #2563eb)`, color: "#ffffff",
-          border: "none", boxShadow: `0 8px 24px rgba(77, 142, 255, 0.4)`,
-          cursor: "pointer", display: "grid", placeItems: "center",
-          zIndex: 4000, fontSize: 28, fontFamily: "inherit",
-          transition: "transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
-        }}
-        onMouseOver={e => e.currentTarget.style.transform = "scale(1.05)"}
-        onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}
-      >
-        <Icon name="smart_toy" size={28} color="#ffffff" />
-      </button>
-
-      {/* WebRTC Collaboration Room — always mounted, floating panel */}
-      <CollabRoom
-        user={user}
-        onQuerySync={(q) => {
-          setActivePath("copilot");
-          setTimeout(() => {
-            sessionStorage.setItem("pending_copilot_query", q);
-            const form = document.getElementById("copilot-form") as HTMLFormElement;
-            if (form) form.requestSubmit();
-          }, 300);
-        }}
-      />
     </div>
   );
 }
+
