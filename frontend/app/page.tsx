@@ -8,6 +8,8 @@ import DashboardHome from "./components/DashboardHome";
 import CopilotWorkspace from "./components/CopilotWorkspace";
 import DocumentsPage from "./components/DocumentsPage";
 import AnalyticsPage from "./components/AnalyticsPage";
+import ProfileSettings from "./components/ProfileSettings";
+import SettingsPage from "./components/SettingsPage";
 
 // ─── Auth Screen ──────────────────────────────────────────────────────────────
 function AuthScreen({ onLogin }: { onLogin: (token: string, user: any) => void }) {
@@ -47,23 +49,24 @@ function AuthScreen({ onLogin }: { onLogin: (token: string, user: any) => void }
   return (
     <div style={{
       minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      background: C.bg,
-      backgroundImage: "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(77,142,255,0.12) 0%, transparent 70%), radial-gradient(ellipse 40% 30% at 90% 80%, rgba(87,27,193,0.1) 0%, transparent 70%)",
+      background: "transparent",
       padding: 20,
     }}>
-      <div style={{
-        width: "100%", maxWidth: 420, background: C.surf,
-        border: `2px solid ${C.black}`, boxShadow: `10px 10px 0 ${C.black}`,
-        borderRadius: 16, padding: 36,
+      <div className="fade-up" style={{
+        width: "100%", maxWidth: 420,
+        ...S.card,
+        padding: 36,
       }}>
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 32 }}>
           <div style={{
-            width: 48, height: 48, background: C.primary, color: "#001a42",
-            borderRadius: 12, border: `2px solid ${C.black}`, boxShadow: `4px 4px 0 ${C.black}`,
+            width: 48, height: 48, 
+            background: `linear-gradient(135deg, ${C.primary}, #2563eb)`,
+            color: "#ffffff",
+            borderRadius: 12, border: "none", boxShadow: "0 4px 14px rgba(77, 142, 255, 0.4)",
             display: "grid", placeItems: "center",
           }}>
-            <Icon name="bolt" size={26} color="#001a42" />
+            <Icon name="bolt" size={26} color="#ffffff" />
           </div>
           <div>
             <div style={{ fontSize: 26, fontWeight: 800, color: C.primary }}>DocOps</div>
@@ -85,11 +88,13 @@ function AuthScreen({ onLogin }: { onLogin: (token: string, user: any) => void }
                 value={(form as any)[f.key]}
                 onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
                 style={{
-                  width: "100%", background: C.surf2, border: `2px solid ${C.border}`,
-                  borderRadius: 10, padding: "10px 14px", fontSize: 14, color: C.text,
-                  outline: "none", boxShadow: `2px 2px 0 ${C.black}`, fontFamily: "inherit",
-                  boxSizing: "border-box",
+                  width: "100%", background: "rgba(0,0,0,0.3)", border: `1px solid ${C.border}`,
+                  borderRadius: 10, padding: "12px 16px", fontSize: 14, color: C.text,
+                  outline: "none", fontFamily: "inherit",
+                  boxSizing: "border-box", transition: "border-color 0.2s",
                 }}
+                onFocus={e => { e.currentTarget.style.borderColor = C.primary; }}
+                onBlur={e => { e.currentTarget.style.borderColor = C.border; }}
               />
             </div>
           ))}
@@ -209,7 +214,7 @@ export default function Page() {
       <Sidebar active={activePath} onNav={setActivePath} onLogout={logout} user={user} />
       <TopBar user={user} onLogout={logout} onNavigate={setActivePath} />
 
-      <main style={{ marginLeft: 256, paddingTop: 64, minHeight: "100vh" }}>
+      <main style={{ marginLeft: 260, paddingTop: 64, minHeight: "100vh" }}>
         {activePath === "dashboard" && (
           <DashboardHome onNavigate={setActivePath} token={token} />
         )}
@@ -245,6 +250,21 @@ export default function Page() {
             </p>
           </div>
         )}
+        {activePath === "profile" && (
+          <ProfileSettings
+            user={user}
+            token={token}
+            onUpdateSuccess={(newToken, updatedUser) => {
+              setToken(newToken);
+              setUser(updatedUser);
+              localStorage.setItem("docops_token", newToken);
+              localStorage.setItem("docops_user", JSON.stringify(updatedUser));
+            }}
+          />
+        )}
+        {activePath === "settings" && (
+          <SettingsPage user={user} />
+        )}
       </main>
 
       {/* Floating AI Action Button */}
@@ -254,14 +274,16 @@ export default function Page() {
         style={{
           position: "fixed", bottom: 28, right: 28,
           width: 60, height: 60, borderRadius: "50%",
-          background: C.primary, color: "#001a42",
-          border: `3px solid ${C.black}`, boxShadow: `5px 5px 0 ${C.black}`,
+          background: `linear-gradient(135deg, ${C.primary}, #2563eb)`, color: "#ffffff",
+          border: "none", boxShadow: `0 8px 24px rgba(77, 142, 255, 0.4)`,
           cursor: "pointer", display: "grid", placeItems: "center",
           zIndex: 9999, fontSize: 28, fontFamily: "inherit",
-          transition: "transform 0.1s"
+          transition: "transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
         }}
+        onMouseOver={e => e.currentTarget.style.transform = "scale(1.05)"}
+        onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}
       >
-        <Icon name="smart_toy" size={28} color="#001a42" />
+        <Icon name="smart_toy" size={28} color="#ffffff" />
       </button>
     </div>
   );

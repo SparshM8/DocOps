@@ -104,6 +104,19 @@ const db = {
     if (useMongoose) return user.comparePassword(password);
     return verifyPassword(password, user.password);
   },
+  async updateUser(id, updates) {
+    if (updates.password) {
+      updates.password = useMongoose ? updates.password : await hashPassword(updates.password);
+    }
+    if (useMongoose) return User.findByIdAndUpdate(id, updates, { new: true });
+    
+    const users = readStore("users.json");
+    const idx = users.findIndex(u => u._id === id);
+    if (idx === -1) return null;
+    users[idx] = { ...users[idx], ...updates, updatedAt: new Date().toISOString() };
+    writeStore("users.json", users);
+    return users[idx];
+  },
   async listDocs() {
     if (useMongoose) return Document.find().sort({ createdAt: -1 });
     return readStore("documents.json").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -278,6 +291,34 @@ app.post("/api/auth/login", async (req, res, next) => {
     db.createAuditLog({ userId: user._id, username: user.username, role: user.role, action: "login", status: "success" }).catch(()=>{});
     
     res.json({ token, user: { id: user._id, username: user.username, role: user.role } });
+  } catch (err) { next(err); }
+});
+
+app.put("/api/auth/profile", requireAuth, async (req, res, next) => {
+  try {
+    const { username, password } = req.body;
+    const updates = {};
+    if (username) {
+      const existing = await db.findUser(username);
+      if (existing && existing._id !== req.user.id) return res.status(400).json({ detail: "Username already taken" });
+      updates.username = username;
+    }
+    if (password) {
+      updates.password = password;
+    }
+    
+    const updatedUser = await db.updateUser(req.user.id, updates);
+    if (!updatedUser) return res.status(404).json({ detail: "User not found" });
+
+    // Generate new token with updated username
+    const token = jwt.sign(
+      { id: updatedUser._id, role: updatedUser.role, username: updatedUser.username },
+      JWT_SECRET, { expiresIn: "7d" }
+    );
+
+    db.createAuditLog({ userId: updatedUser._id, username: updatedUser.username, role: updatedUser.role, action: "update_profile", status: "success" }).catch(()=>{});
+    
+    res.json({ token, user: { id: updatedUser._id, username: updatedUser.username, role: updatedUser.role } });
   } catch (err) { next(err); }
 });
 

@@ -60,7 +60,7 @@ export default function DashboardHome({ onNavigate, token }: DashboardProps) {
   };
 
   return (
-    <div style={{ padding: 28, overflowY: "auto", minHeight: "100%" }}>
+    <div className="fade-up" style={{ padding: 28, overflowY: "auto", minHeight: "100%" }}>
       {showScanner && (
         <ARScannerModal 
           onClose={() => setShowScanner(false)} 

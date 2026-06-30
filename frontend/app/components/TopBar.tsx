@@ -63,9 +63,9 @@ export default function TopBar({ user, onLogout, onNavigate }: TopBarProps) {
     }}>
       <div style={{
         display: "flex", alignItems: "center", gap: 10,
-        background: C.surf2, border: `2px solid ${C.border}`,
-        borderRadius: 10, padding: "8px 16px",
-        boxShadow: `2px 2px 0 ${C.black}`, width: 340,
+        background: C.surf2, border: `1px solid ${C.border}`,
+        borderRadius: 12, padding: "8px 16px",
+        boxShadow: `0 4px 12px rgba(0,0,0,0.1)`, width: 340,
         transition: "all 0.2s ease"
       }}>
         <Icon name="search" size={18} color={C.muted} />
@@ -112,8 +112,9 @@ export default function TopBar({ user, onLogout, onNavigate }: TopBarProps) {
           {showNotifications && (
             <div style={{
               position: "absolute", top: 52, right: 0, width: 320,
-              background: C.surf, border: `2px solid ${C.border}`,
-              borderRadius: 12, boxShadow: `4px 4px 0 ${C.black}`,
+              background: C.surf, border: `1px solid ${C.border}`,
+              backdropFilter: "blur(16px)",
+              borderRadius: 12, boxShadow: `0 8px 32px rgba(0,0,0,0.4)`,
               padding: "16px 0", zIndex: 1000,
               animation: "fadeIn 0.2s ease",
             }}>
@@ -166,10 +167,10 @@ export default function TopBar({ user, onLogout, onNavigate }: TopBarProps) {
               </div>
               <div style={{
                 width: 38, height: 38, borderRadius: "50%",
-                background: C.primary, color: "#001a42",
+                background: `linear-gradient(135deg, ${C.primary}, #2563eb)`, color: "#ffffff",
                 display: "grid", placeItems: "center",
                 fontWeight: 800, fontSize: 15,
-                border: `2px solid ${C.black}`, boxShadow: `2px 2px 0 ${C.black}`,
+                border: `none`, boxShadow: `0 2px 8px rgba(77, 142, 255, 0.4)`,
               }}>
                 {user.username?.charAt(0)?.toUpperCase()}
               </div>
@@ -179,8 +180,9 @@ export default function TopBar({ user, onLogout, onNavigate }: TopBarProps) {
             {showProfile && (
               <div style={{
                 position: "absolute", top: 56, right: 0, width: 240,
-                background: C.surf, border: `2px solid ${C.border}`,
-                borderRadius: 12, boxShadow: `4px 4px 0 ${C.black}`,
+                background: C.surf, border: `1px solid ${C.border}`,
+                backdropFilter: "blur(16px)",
+                borderRadius: 12, boxShadow: `0 8px 32px rgba(0,0,0,0.4)`,
                 padding: "8px 0", zIndex: 1000,
                 animation: "fadeIn 0.2s ease",
               }}>
@@ -190,6 +192,7 @@ export default function TopBar({ user, onLogout, onNavigate }: TopBarProps) {
                 </div>
                 
                 <div 
+                  onClick={() => { setShowProfile(false); onNavigate && onNavigate("profile"); }}
                   style={{ padding: "10px 20px", fontSize: 13, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}
                   onMouseEnter={(e) => e.currentTarget.style.background = C.surf3}
                   onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
@@ -197,6 +200,7 @@ export default function TopBar({ user, onLogout, onNavigate }: TopBarProps) {
                   <Icon name="person" size={18} /> My Profile
                 </div>
                 <div 
+                  onClick={() => { setShowProfile(false); onNavigate && onNavigate("settings"); }}
                   style={{ padding: "10px 20px", fontSize: 13, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}
                   onMouseEnter={(e) => e.currentTarget.style.background = C.surf3}
                   onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
