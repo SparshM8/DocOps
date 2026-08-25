@@ -64,7 +64,7 @@ export default function DashboardHome({ onNavigate, token }: DashboardProps) {
       {showScanner && (
         <ARScannerModal 
           onClose={() => setShowScanner(false)} 
-          onScanComplete={handleScanComplete} 
+          onScan={handleScanComplete}
         />
       )}
       {/* Hero */}

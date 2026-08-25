@@ -6,6 +6,15 @@ import KnowledgeGraph from "./KnowledgeGraph";
 import VoiceModal from "./VoiceModal";
 import { CreateMLCEngine, MLCEngineInterface } from "@mlc-ai/web-llm";
 
+function speakText(text: string, lang: "en-IN" | "hi-IN") {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text.replace(/[*#]/g, ""));
+  utterance.lang = lang;
+  utterance.rate = 0.96;
+  window.speechSynthesis.speak(utterance);
+}
+
 interface CopilotProps {
   token: string;
   user: any;
@@ -224,8 +233,7 @@ export default function CopilotWorkspace({ token, user, docs, allTags, indexedCo
       }
 
       if (readAloudRef.current && finalAssistantText) {
-        const utterance = new SpeechSynthesisUtterance(finalAssistantText.replace(/[*#]/g, ""));
-        window.speechSynthesis.speak(utterance);
+        speakText(finalAssistantText, voiceLang);
       }
     } catch (err: any) {
       setMessages(p => p.map(m => m.id === assistantMsgId ? { ...m, role: "error", content: `⚠️ Query failed: ${err.message}` } : m));

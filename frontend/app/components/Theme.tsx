@@ -65,11 +65,11 @@ export const S = {
 };
 
 // Component: Icon
-export function Icon({ name, size = 20, color }: { name: string; size?: number; color?: string }) {
+export function Icon({ name, size = 20, color, style }: { name: string; size?: number; color?: string; style?: React.CSSProperties }) {
   return (
     <span
       className="material-symbols-outlined"
-      style={{ fontSize: size, color, display: "inline-flex", alignItems: "center", lineHeight: 1 }}
+      style={{ fontSize: size, color, display: "inline-flex", alignItems: "center", lineHeight: 1, ...style }}
     >
       {name}
     </span>

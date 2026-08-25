@@ -11,7 +11,7 @@ export default function KnowledgeGraph({ token, onRunQuery }: { token: string, o
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<any>(null);
-  const graphRef = useRef<any>();
+  const graphRef = useRef<any>(null);
 
   useEffect(() => {
     async function fetchData() {
